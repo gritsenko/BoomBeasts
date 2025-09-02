@@ -33,6 +33,12 @@ placeholderSlot.className = 'placeholder-slot';
 // --- Game Scene ---
 class GameScene extends Phaser.Scene {
     constructor() { super({ key: 'GameScene' }); }
+    
+    preload() {
+        this.load.image('duck', 'sprites/duck.png');
+        this.load.image('kapibara', 'sprites/kapibara.png');
+    }
+    
     create() {
         const platformWidth = 500;
         const platformHeight = 40;
@@ -43,8 +49,8 @@ class GameScene extends Phaser.Scene {
         platformGraphics.fillStyle(0x8B4513);
         platformGraphics.fillRect(platformX - platformWidth / 2, platformY - platformHeight / 2, platformWidth, platformHeight);
         this.platform = { y: platformY };
-        this.player = this.createBeast(300, 230, 0x4a90e2);
-        this.enemy = this.createBeast(500, 230, 0xd0021b);
+        this.player = this.createBeast(300, 230, 0x4a90e2, 'duck', true);
+        this.enemy = this.createBeast(500, 230, 0xd0021b, 'kapibara', false);
         this.enemyTimer = this.time.addEvent({ delay: 1500 + Math.random() * 1000, callback: this.enemyMakeDecision, callbackScope: this, loop: true });
     }
     enemyMakeDecision() {
@@ -60,7 +66,7 @@ class GameScene extends Phaser.Scene {
         }
         processEnemyActionQueue();
     }
-    createBeast(x, y, color) {
+    createBeast(x, y, color, skin = null, mirror = false) {
         const group = this.matter.world.nextGroup(true);
         const initialDensity = 0.000825;
         const mainBody = this.matter.bodies.circle(x, y, 46, { collisionFilter: { group: group }, friction: 0.1, restitution: 0.5, density: initialDensity });
@@ -74,9 +80,20 @@ class GameScene extends Phaser.Scene {
         const compoundBody = this.matter.body.create({ parts: [mainBody, ...wobbleParts] });
         compoundBody.initialDensity = initialDensity;
         this.matter.world.add(compoundBody);
-        const graphics = this.add.graphics();
-        const container = this.add.container(x, y, [graphics]);
-        container.setData({ 'body': compoundBody, 'graphics': graphics, 'color': color });
+        
+        let displayObject;
+        if (skin) {
+            // Use sprite for skinned characters
+            displayObject = this.add.sprite(0, 0, skin);
+            const scaleX = mirror ? -0.7 : 0.7;
+            displayObject.setScale(scaleX, 0.7); // Mirror horizontally if specified
+        } else {
+            // Use graphics for default characters
+            displayObject = this.add.graphics();
+        }
+        
+        const container = this.add.container(x, y, [displayObject]);
+        container.setData({ 'body': compoundBody, 'displayObject': displayObject, 'color': color, 'skin': skin });
         compoundBody.gameObject = container;
         return compoundBody;
     }
@@ -96,17 +113,27 @@ class GameScene extends Phaser.Scene {
     }
     drawBeast(beastBody) {
         const container = beastBody.gameObject;
-        const graphics = container.getData('graphics');
+        const displayObject = container.getData('displayObject');
         const color = container.getData('color');
+        const skin = container.getData('skin');
+        
         container.setPosition(beastBody.position.x, beastBody.position.y);
-        graphics.clear();
-        graphics.fillStyle(color, 0.8);
-        graphics.lineStyle(2, 0x000000, 0.5);
-        beastBody.parts.forEach((part, i) => {
-            if (i === 0) return;
-            graphics.fillCircle(part.position.x - beastBody.position.x, part.position.y - beastBody.position.y, part.circleRadius);
-            graphics.strokeCircle(part.position.x - beastBody.position.x, part.position.y - beastBody.position.y, part.circleRadius);
-        });
+        
+        if (skin) {
+            // For sprites, just update position (sprite handles its own rendering)
+            displayObject.setPosition(0, 0);
+        } else {
+            // For graphics-based characters, redraw the circles
+            const graphics = displayObject;
+            graphics.clear();
+            graphics.fillStyle(color, 0.8);
+            graphics.lineStyle(2, 0x000000, 0.5);
+            beastBody.parts.forEach((part, i) => {
+                if (i === 0) return;
+                graphics.fillCircle(part.position.x - beastBody.position.x, part.position.y - beastBody.position.y, part.circleRadius);
+                graphics.strokeCircle(part.position.x - beastBody.position.x, part.position.y - beastBody.position.y, part.circleRadius);
+            });
+        }
     }
     checkBounds(beastBody) {
         if (isRoundOver || !beastBody.gameObject.visible) return;
@@ -284,10 +311,22 @@ function applyStomp(beast, power) {
      const verticalForce = -0.04 * power; 
      const horizontalForce = direction * 0.05 * power;
      scene.matter.body.applyForce(beast, beast.position, { x: horizontalForce, y: verticalForce });
+     
+     // Create shockwave attached to the character's container
+     const container = beast.gameObject;
      const shockwave = scene.add.graphics();
      shockwave.lineStyle(power * 3, 0x000000, 0.5);
-     shockwave.strokeCircle(beast.position.x, beast.position.y, power * 20);
-     scene.tweens.add({ targets: shockwave, alpha: 0, scale: 2, duration: 300, onComplete: () => shockwave.destroy() });
+     shockwave.strokeCircle(0, 0, power * 20); // Position relative to container (0, 0)
+     container.add(shockwave); // Add to container so it moves with character
+     
+     scene.tweens.add({ 
+         targets: shockwave, 
+         alpha: 0, 
+         scaleX: 2, 
+         scaleY: 2, 
+         duration: 300, 
+         onComplete: () => shockwave.destroy() 
+     });
 }
 
 function applyBlock(beast) {
@@ -295,10 +334,22 @@ function applyBlock(beast) {
     const scene = game.scene.getScene('GameScene');
     const blockDensity = beast.initialDensity * 10;
     scene.matter.body.setDensity(beast, blockDensity);
+    
+    // Create shield attached to the character's container
+    const container = beast.gameObject;
     const shield = scene.add.graphics();
     shield.fillStyle(0xffffff, 0.5);
-    shield.fillCircle(beast.position.x, beast.position.y, 50);
-    scene.tweens.add({ targets: shield, alpha: 0, scale: 1.2, duration: 1000, onComplete: () => shield.destroy() });
+    shield.fillCircle(0, 0, 50); // Position relative to container (0, 0)
+    container.add(shield); // Add to container so it moves with character
+    
+    scene.tweens.add({ 
+        targets: shield, 
+        alpha: 0, 
+        scaleX: 1.2, 
+        scaleY: 1.2, 
+        duration: 1000, 
+        onComplete: () => shield.destroy() 
+    });
     setTimeout(() => { if (beast.gameObject) { scene.matter.body.setDensity(beast, beast.initialDensity); } }, 1000);
 }
 

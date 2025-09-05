@@ -12,7 +12,7 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #2c3e50;
+            background-color: #7991a8;
             /* A dark slate background */
         }
 
@@ -27,7 +27,7 @@
 <body>
     <!-- CDN imports for the physics and rendering libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.0/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixijs@8.0.0/dist/pixi.umd.min.js"></script>
 
     <script>
         // --- Core Setup ---
@@ -37,8 +37,6 @@
         const Render = Matter.Render;
         const Runner = Matter.Runner;
         const Composites = Matter.Composites;
-        const MouseConstraint = Matter.MouseConstraint;
-        const Mouse = Matter.Mouse;
         const World = Matter.World;
         const Events = Matter.Events;
         const Body = Matter.Body;
@@ -48,12 +46,19 @@
     let orderedBodies = null; // row-major order mapping for mesh vertices
     let bodyGrid = null;      // 2D grid of particle bodies [rows][cols]
         let ground, wallLeft, wallRight, ceiling;
-        let isMagnetActive = false; // Flag to check if the mouse magnet is on
+    let debugGrid = null; // Graphics object for debug grid visualization
+        let debugGridVisible = true; // Flag to toggle debug grid visibility
+    let meshDebugGrid = null; // Graphics object for PIXI mesh debug grid
+    let meshDebugGridVisible = true; // Flag to toggle mesh debug grid visibility
+    let enablePhysicsMapping = true; // Always enable physics-to-mesh mapping for correct mesh display
+    // Parameters for drawing the rectangular mesh grid (set when mesh is created)
+    let meshGridParams = null; // { startX, startY, dx, dy, rows, cols }
 
-        // Define a collision category for objects the mouse can interact with
-        const draggableCategory = 0x0002;
+    // CONTROLS:
+    // D - Toggle physics debug grid
+    // M - Toggle mesh debug grid
+    // P - Toggle physics-to-mesh mapping
 
-        // --- Function to add walls ---
         function addWalls() {
             const wallThickness = 50;
             const wallOptions = {
@@ -102,6 +107,33 @@
 
         // --- Initialization Function ---
         function init() {
+            // --- Function to create character mesh ---
+            function createCharacterMesh(texture, bodyWidth, bodyHeight) {
+                // Create MeshPlane (PIXI v8)
+                kapibaraMesh = new PIXI.scene.MeshPlane({
+                    texture: texture,
+                    verticesX: cols,
+                    verticesY: rows,
+                    width: bodyWidth,
+                    height: bodyHeight
+                });
+                kapibaraMesh.x = 0;
+                kapibaraMesh.y = 0;
+                pixiApp.stage.addChild(kapibaraMesh);
+            }
+
+            // --- Function to setup ordered bodies for debug grids ---
+            function setupOrderedBodies() {
+                if (!kapibaraMesh || !softBody) return;
+
+                // Simple row-major ordering to match PlaneGeometry exactly
+                orderedBodies = [];
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        orderedBodies.push(bodyGrid[r][c]);
+                    }
+                }
+            }
             // 1. PIXI.JS SETUP (RENDERING)
             // Create a Pixi application
             pixiApp = new PIXI.Application({
@@ -126,18 +158,14 @@
 
             // 3. CREATE THE SOFT BODY (parameters only for now)
             // Define the properties of our soft body grid
-            const cols = 50; // much higher resolution for smoother deformation
-            const rows = 30;
+            const cols = 10; // reduced resolution for easier debugging
+            const rows = 10;
             const particleOptions = {
                 friction: 0.05,
                 frictionStatic: 0.0,
                 frictionAir: 0.03,
                 restitution: 0.1,
                 render: { visible: false }, // We'll render with Pixi, so hide Matter's default shapes
-                // Assign our custom category to the soft body's particles
-                collisionFilter: {
-                    category: draggableCategory
-                }
             };
             const constraintOptions = {
                 stiffness: 0.98, // Very stiff to minimize visible grid lines
@@ -269,88 +297,170 @@
                 Matter.Composite.add(softBody, constraints);
                 World.add(world, softBody);
 
-                // Simple row-major ordering to match PlaneGeometry exactly
-                orderedBodies = [];
-                for (let r = 0; r < rows; r++) {
-                    for (let c = 0; c < cols; c++) {
-                        orderedBodies.push(bodyGrid[r][c]);
-                    }
-                }
 
-                // Create matching plane geometry (same cols/rows) with preserved aspect ratio
-                const planeGeom = new PIXI.PlaneGeometry(bodyWidth, bodyHeight, cols - 1, rows - 1);
-                kapibaraMesh = new PIXI.Mesh(planeGeom, new PIXI.MeshMaterial(texture));
-                pixiApp.stage.addChild(kapibaraMesh);
+                // Phase 1: Create character mesh (always)
+                createCharacterMesh(texture, bodyWidth, bodyHeight);
+
+                // Save mesh grid params for rectangular debug rendering
+                meshGridParams = {
+                    startX: startX,
+                    startY: startY,
+                    dx: dx,
+                    dy: dy,
+                    rows: rows,
+                    cols: cols
+                };
+
+                // Always setup ordered bodies for debug grids
+                setupOrderedBodies();
+
+                // Phase 2: Physics-to-mesh mapping is controlled by enablePhysicsMapping flag
+
+                // Create debug grid graphics
+                debugGrid = new PIXI.Graphics();
+                debugGrid.visible = debugGridVisible;
+                pixiApp.stage.addChild(debugGrid);
+
+                // Create mesh debug grid graphics
+                meshDebugGrid = new PIXI.Graphics();
+                meshDebugGrid.visible = meshDebugGridVisible;
+                pixiApp.stage.addChild(meshDebugGrid);
             });
 
-            // 5. MOUSE INTERACTION
-            // Add mouse controls to interact with the physics world
-            const mouse = Mouse.create(pixiApp.view);
-            const mouseConstraint = MouseConstraint.create(engine, {
-                mouse: mouse,
-                constraint: {
-                    stiffness: 0.2,
-                    render: {
-                        visible: false // Don't show the default constraint line
+            // Add keyboard listener to toggle debug grid
+            window.addEventListener('keydown', (event) => {
+                if (event.key === 'd' || event.key === 'D') {
+                    debugGridVisible = !debugGridVisible;
+                    if (debugGrid) {
+                        debugGrid.visible = debugGridVisible;
                     }
-                },
-                // Configure the mouse to ONLY interact with the draggable category
-                collisionFilter: {
-                    mask: draggableCategory
+                }
+                // Toggle mesh debug grid with 'M' key
+                if (event.key === 'm' || event.key === 'M') {
+                    meshDebugGridVisible = !meshDebugGridVisible;
+                    if (meshDebugGrid) {
+                        meshDebugGrid.visible = meshDebugGridVisible;
+                    }
+                }
+                // Toggle physics mapping with 'P' key
+                if (event.key === 'p' || event.key === 'P') {
+                    enablePhysicsMapping = !enablePhysicsMapping;
+                    console.log('Physics-to-mesh mapping:', enablePhysicsMapping ? 'ENABLED' : 'DISABLED');
+                    
+                    // orderedBodies is already set up, no need to call setup again
                 }
             });
 
-            World.add(world, mouseConstraint);
 
-            // The `Mouse.create` function in Matter.js automatically handles
-            // adding the necessary mouse event listeners to the canvas.
-            // The manual listeners that were here before were redundant and
-            // caused the error because the Matter.js API has changed.
-
-            // Add event listeners to the canvas to handle the magnet effect
-            pixiApp.view.addEventListener('mousedown', () => { isMagnetActive = true; });
-            pixiApp.view.addEventListener('mouseup', () => { isMagnetActive = false; });
-            pixiApp.view.addEventListener('mouseout', () => { isMagnetActive = false; }); // Turn off if mouse leaves canvas
-
-
-            // 6. MAIN SIMULATION LOOP
+            // 5. MAIN SIMULATION LOOP
             // This is the core logic: update the renderer based on the physics engine's state
             Events.on(engine, 'afterUpdate', () => {
                 if (!softBody || !kapibaraMesh) return; // Wait until both are ready
-                // --- Magnet Logic ---
-                if (isMagnetActive) {
-                    const mousePosition = mouseConstraint.mouse.position;
-                    // Adjust this value for stronger/weaker pull.
-                    const magnetStrength = 0.00025;
 
-                    for (const particle of softBody.bodies) {
-                        const direction = Vector.sub(mousePosition, particle.position);
-                        const distanceSq = Vector.magnitudeSquared(direction);
+                // Phase 2: Map physics positions to mesh vertices (conditional)
+                if (enablePhysicsMapping && orderedBodies && meshGridParams) {
+                    const vertices = kapibaraMesh.geometry.getBuffer('aVertexPosition').data;
+                    const { startX, startY } = meshGridParams;
+                    // Map physics positions to local mesh space
+                    for (let i = 0; i < orderedBodies.length; i++) {
+                        const particle = orderedBodies[i];
+                        vertices[i * 2] = particle.position.x - startX;
+                        vertices[i * 2 + 1] = particle.position.y - startY;
+                    }
+                    kapibaraMesh.geometry.getBuffer('aVertexPosition').update();
+                }
 
-                        // Apply force only if the particle is not extremely close to the mouse
-                        // This prevents wild physics glitches when the distance is near zero.
-                        if (distanceSq > 25) {
-                            const forceMagnitude = (magnetStrength * particle.mass * 100) / distanceSq;
-                            const force = Vector.normalise(direction);
-                            Vector.mult(force, forceMagnitude, force);
-                            Body.applyForce(particle, particle.position, force);
+                // Update debug grid visualization
+                if (debugGrid && bodyGrid) {
+                    debugGrid.clear();
+                    debugGrid.lineStyle(1, 0xff0000, 0.5); // Red lines with 50% opacity
+                    
+                    // Draw horizontal lines
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols - 1; c++) {
+                            const current = bodyGrid[r][c];
+                            const next = bodyGrid[r][c + 1];
+                            debugGrid.moveTo(current.position.x, current.position.y);
+                            debugGrid.lineTo(next.position.x, next.position.y);
+                        }
+                    }
+                    
+                    // Draw vertical lines
+                    for (let c = 0; c < cols; c++) {
+                        for (let r = 0; r < rows - 1; r++) {
+                            const current = bodyGrid[r][c];
+                            const next = bodyGrid[r + 1][c];
+                            debugGrid.moveTo(current.position.x, current.position.y);
+                            debugGrid.lineTo(next.position.x, next.position.y);
                         }
                     }
                 }
 
-                const vertices = kapibaraMesh.geometry.getBuffer('aVertexPosition').data;
+                // Update mesh debug grid visualization
+                if (meshDebugGrid) {
+                    meshDebugGrid.clear();
+                    meshDebugGrid.lineStyle(1, 0x00ff00, 0.8); // Green lines with 80% opacity
 
-                // Iterate through all the particles in our soft body
-                const bodies = orderedBodies || softBody.bodies;
-                for (let i = 0; i < bodies.length; i++) {
-                    const particle = bodies[i];
-                    // Update the corresponding vertex in the Pixi mesh
-                    vertices[i * 2] = particle.position.x;
-                    vertices[i * 2 + 1] = particle.position.y;
+                    // Preferred: draw rectangular axis-aligned cells using meshGridParams
+                    if (meshGridParams && kapibaraMesh) {
+                        // Draw true mesh quads: for each cell, connect the four mesh vertices
+                        const vertices = kapibaraMesh.geometry.getBuffer('aVertexPosition').data;
+                        const { rows: mRows, cols: mCols } = meshGridParams;
+                        for (let r = 0; r < mRows - 1; r++) {
+                            for (let c = 0; c < mCols - 1; c++) {
+                                // Indices for quad corners: top-left, top-right, bottom-right, bottom-left
+                                const iTL = (r * mCols + c) * 2;
+                                const iTR = (r * mCols + (c + 1)) * 2;
+                                const iBR = ((r + 1) * mCols + (c + 1)) * 2;
+                                const iBL = ((r + 1) * mCols + c) * 2;
+
+                                const xTL = vertices[iTL];
+                                const yTL = vertices[iTL + 1];
+                                const xTR = vertices[iTR];
+                                const yTR = vertices[iTR + 1];
+                                const xBR = vertices[iBR];
+                                const yBR = vertices[iBR + 1];
+                                const xBL = vertices[iBL];
+                                const yBL = vertices[iBL + 1];
+
+                                meshDebugGrid.moveTo(xTL, yTL);
+                                meshDebugGrid.lineTo(xTR, yTR);
+                                meshDebugGrid.lineTo(xBR, yBR);
+                                meshDebugGrid.lineTo(xBL, yBL);
+                                meshDebugGrid.lineTo(xTL, yTL);
+                            }
+                        }
+                    } else if (kapibaraMesh) {
+                        // Fallback: draw grid by connecting mesh vertices (original behavior)
+                        const vertices = kapibaraMesh.geometry.getBuffer('aVertexPosition').data;
+                        // Draw horizontal lines
+                        for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols - 1; c++) {
+                                const currentIndex = r * cols + c;
+                                const nextIndex = r * cols + c + 1;
+                                const currentX = vertices[currentIndex * 2];
+                                const currentY = vertices[currentIndex * 2 + 1];
+                                const nextX = vertices[nextIndex * 2];
+                                const nextY = vertices[nextIndex * 2 + 1];
+                                meshDebugGrid.moveTo(currentX, currentY);
+                                meshDebugGrid.lineTo(nextX, nextY);
+                            }
+                        }
+                        // Draw vertical lines
+                        for (let c = 0; c < cols; c++) {
+                            for (let r = 0; r < rows - 1; r++) {
+                                const currentIndex = r * cols + c;
+                                const nextIndex = (r + 1) * cols + c;
+                                const currentX = vertices[currentIndex * 2];
+                                const currentY = vertices[currentIndex * 2 + 1];
+                                const nextX = vertices[nextIndex * 2];
+                                const nextY = vertices[nextIndex * 2 + 1];
+                                meshDebugGrid.moveTo(currentX, currentY);
+                                meshDebugGrid.lineTo(nextX, nextY);
+                            }
+                        }
+                    }
                 }
-
-                // Tell Pixi that the geometry has been updated and needs to be redrawn
-                kapibaraMesh.geometry.getBuffer('aVertexPosition').update();
             });
         }
 

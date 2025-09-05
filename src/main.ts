@@ -1,220 +1,351 @@
-import { Application, Assets, MeshPlane, Graphics } from "pixi.js";
-
-// Set this to true to show the debug grid overlay
-const SHOW_GRID = false;
+import { Application, Assets } from "pixi.js";
 import Matter from "matter-js";
+import { SoftBodyCharacter } from "./SoftBodyCharacter";
 
-// Soft body settings for easy tuning
-const SOFT_BODY_SETTINGS = {
+// Gameplay constants (ported from prototype)
+const MAX_ENERGY = 100;
+const ENERGY_REGEN = 25; // per second
+const STOMP_COST = 20;
+const BLOCK_COST = MAX_ENERGY / 2;
+const ACTION_DELAY = 2000; // ms
+const COMBO_WINDOW = 1000; // ms
+
+// Soft body config
+const SOFT_CFG = {
   stiffness: 0.1,
   damping: 0.3,
   particleRadius: 5,
-  gravity: 0.9,
+  gravity: 1.0,
   frictionAir: 0.03,
   restitution: 0.1,
-  gridSizeX: 4, // Number of columns
-  gridSizeY: 5  // Number of rows
+  gridSizeX: 4,
+  gridSizeY: 5,
 };
 
+// UI refs
+const timelineDiv = document.getElementById("timeline") as HTMLDivElement;
+const energyBar = document.getElementById("energy-bar") as HTMLDivElement;
+const stompButton = document.getElementById(
+  "stomp-button",
+) as HTMLButtonElement;
+const blockButton = document.getElementById(
+  "block-button",
+) as HTMLButtonElement;
+const gameMessage = document.getElementById("game-message") as HTMLDivElement;
+const placeholderSlot = document.createElement("div");
+placeholderSlot.className = "placeholder-slot";
+
+// Game state
+type PlayerAction =
+  | {
+      type: "stomp";
+      power: number;
+      icon: HTMLDivElement;
+      comboText: HTMLSpanElement;
+      countdownFill: HTMLDivElement;
+    }
+  | { type: "block"; icon: HTMLDivElement; countdownFill: HTMLDivElement };
+type EnemyAction = { type: "stomp"; power: number } | { type: "block" };
+let playerEnergy = MAX_ENERGY;
+let enemyEnergy = MAX_ENERGY;
+let isRoundOver = false;
+let playerTimeline: PlayerAction[] = [];
+let enemyTimeline: EnemyAction[] = [];
+let isActionTicking = false;
+let isEnemyActionTicking = false;
+let lastStompPressTime = 0;
+let activeActionTimeout: number | null = null;
+let activeEnemyActionTimeout: number | null = null;
+let comboTimeout: number | null = null;
+
 (async () => {
-  // Create a new application
   const app = new Application();
-
-  // Initialize the application
-  await app.init({ background: "#1099bb", resizeTo: window });
-
-  // Append the application canvas to the document body
+  await app.init({ background: "#fafafa", width: 800, height: 330 });
   document.getElementById("pixi-container")!.appendChild(app.canvas);
 
-  // Initialize Matter.js
-  const { Engine, World, Bodies, Constraint } = Matter;
+  // Matter world
+  const { Engine, World, Bodies } = Matter;
   const engine = Engine.create();
-  engine.world.gravity.y = SOFT_BODY_SETTINGS.gravity; // Add gravity
+  engine.world.gravity.y = SOFT_CFG.gravity;
 
-  // Add scene boundaries
-  const ground = Bodies.rectangle(app.screen.width / 2, app.screen.height + 50, app.screen.width, 100, { isStatic: true });
-  const leftWall = Bodies.rectangle(-50, app.screen.height / 2, 100, app.screen.height, { isStatic: true });
-  const rightWall = Bodies.rectangle(app.screen.width + 50, app.screen.height / 2, 100, app.screen.height, { isStatic: true });
-  const ceiling = Bodies.rectangle(app.screen.width / 2, -50, app.screen.width, 100, { isStatic: true });
+  // Platform & bounds
+  const platformWidth = 500;
+  const platformHeight = 40;
+  const platformX = 400;
+  const platformY = 300;
+  const ground = Bodies.rectangle(
+    platformX,
+    platformY,
+    platformWidth,
+    platformHeight,
+    { isStatic: true, label: "platform" },
+  );
+  const leftWall = Bodies.rectangle(
+    -50,
+    app.screen.height / 2,
+    100,
+    app.screen.height,
+    { isStatic: true },
+  );
+  const rightWall = Bodies.rectangle(
+    app.screen.width + 50,
+    app.screen.height / 2,
+    100,
+    app.screen.height,
+    { isStatic: true },
+  );
+  const ceiling = Bodies.rectangle(
+    app.screen.width / 2,
+    -50,
+    app.screen.width,
+    100,
+    { isStatic: true },
+  );
   World.add(engine.world, [ground, leftWall, rightWall, ceiling]);
 
-  // Load the kapibara texture
-  const kapibaraTexture = await Assets.load("/assets/sprites/kapibara.png");
+  // Load textures
+  const [duckTexture, kapibaraTexture] = await Promise.all([
+    Assets.load("/assets/sprites/duck.png"),
+    Assets.load("/assets/sprites/kapibara.png"),
+  ]);
 
-  // Create a mesh plane with kapibara texture
-  const gridSizeX = SOFT_BODY_SETTINGS.gridSizeX;
-  const gridSizeY = SOFT_BODY_SETTINGS.gridSizeY;
-  const meshPlane = new MeshPlane({
+  // Create characters
+  const player = new SoftBodyCharacter(app, engine, {
+    x: 300,
+    y: 230,
+    texture: duckTexture,
+    gridSizeX: SOFT_CFG.gridSizeX,
+    gridSizeY: SOFT_CFG.gridSizeY,
+    particleRadius: SOFT_CFG.particleRadius,
+    stiffness: SOFT_CFG.stiffness,
+    damping: SOFT_CFG.damping,
+    frictionAir: SOFT_CFG.frictionAir,
+    restitution: SOFT_CFG.restitution,
+  debugGrid: true,
+    scale: 0.7,
+  });
+  const enemy = new SoftBodyCharacter(app, engine, {
+    x: 500,
+    y: 230,
     texture: kapibaraTexture,
-    verticesX: gridSizeX,
-    verticesY: gridSizeY,
+    gridSizeX: SOFT_CFG.gridSizeX,
+    gridSizeY: SOFT_CFG.gridSizeY,
+    particleRadius: SOFT_CFG.particleRadius,
+    stiffness: SOFT_CFG.stiffness,
+    damping: SOFT_CFG.damping,
+    frictionAir: SOFT_CFG.frictionAir,
+    restitution: SOFT_CFG.restitution,
+  debugGrid: true,
+    mirror: true,
+    scale: 0.7,
   });
 
-  // Center mesh on screen
-  meshPlane.x = (app.screen.width - meshPlane.width) / 2;
-  meshPlane.y = (app.screen.height - meshPlane.height) / 2;
-  // Move mesh up to match the particle vertical offset so the skin and physics align
-  meshPlane.y -= 150;
-  app.stage.addChild(meshPlane);
-
-  // Create soft body physics grid manually (replacing deprecated Composites.softBody)
-  // Calculate grid gaps for physics grid
-  const columnGap = meshPlane.width / (gridSizeX - 1);
-  const rowGap = meshPlane.height / (gridSizeY - 1);
-  const particleRadius = SOFT_BODY_SETTINGS.particleRadius;
-  const particleOptions = {
-    friction: 0.05,
-    frictionStatic: 0.0,
-    frictionAir: SOFT_BODY_SETTINGS.frictionAir,
-    restitution: SOFT_BODY_SETTINGS.restitution,
-    render: { fillStyle: '#222222' }
-  };
-  const constraintOptions = {
-    stiffness: SOFT_BODY_SETTINGS.stiffness,
-    damping: SOFT_BODY_SETTINGS.damping,
-    render: { visible: false }
-  };
-
-  const softBody = { bodies: [] as Matter.Body[], constraints: [] as Matter.Constraint[] };
-
-  // Create particles
-  for (let y = 0; y < gridSizeY; y++) {
-    for (let x = 0; x < gridSizeX; x++) {
-      const body = Bodies.circle(
-        meshPlane.x + x * columnGap,
-        meshPlane.y + y * rowGap,
-        particleRadius,
-        particleOptions
-      );
-      softBody.bodies.push(body);
-    }
-  }
-
-  // Create constraints
-  for (let y = 0; y < gridSizeY; y++) {
-    for (let x = 0; x < gridSizeX; x++) {
-      const bodyA = softBody.bodies[y * gridSizeX + x];
-
-      // Connect to right neighbor
-      if (x < gridSizeX - 1) {
-        const bodyB = softBody.bodies[y * gridSizeX + x + 1];
-        softBody.constraints.push(Constraint.create({
-          bodyA: bodyA,
-          bodyB: bodyB,
-          ...constraintOptions
-        }));
-      }
-
-      // Connect to bottom neighbor
-      if (y < gridSizeY - 1) {
-        const bodyB = softBody.bodies[(y + 1) * gridSizeX + x];
-        softBody.constraints.push(Constraint.create({
-          bodyA: bodyA,
-          bodyB: bodyB,
-          ...constraintOptions
-        }));
-      }
-
-      // Add cross braces for stability
-      if (x < gridSizeX - 1 && y < gridSizeY - 1) {
-        const bodyB = softBody.bodies[(y + 1) * gridSizeX + x + 1];
-        softBody.constraints.push(Constraint.create({
-          bodyA: bodyA,
-          bodyB: bodyB,
-          stiffness: SOFT_BODY_SETTINGS.stiffness * 0.3,
-          damping: SOFT_BODY_SETTINGS.damping,
-          render: { visible: false }
-        }));
-      }
-
-      // Additional bending constraints (skip one) to improve stability and motion
-      if (x < gridSizeX - 2) {
-        const bodyB = softBody.bodies[y * gridSizeX + x + 2];
-        softBody.constraints.push(Constraint.create({
-          bodyA: bodyA,
-          bodyB: bodyB,
-          stiffness: SOFT_BODY_SETTINGS.stiffness * 0.2,
-          damping: SOFT_BODY_SETTINGS.damping * 0.5,
-          render: { visible: false }
-        }));
-      }
-      if (y < gridSizeY - 2) {
-        const bodyB = softBody.bodies[(y + 2) * gridSizeX + x];
-        softBody.constraints.push(Constraint.create({
-          bodyA: bodyA,
-          bodyB: bodyB,
-          stiffness: SOFT_BODY_SETTINGS.stiffness * 0.2,
-          damping: SOFT_BODY_SETTINGS.damping * 0.5,
-          render: { visible: false }
-        }));
-      }
-    }
-  }
-
-  World.add(engine.world, softBody.bodies);
-  World.add(engine.world, softBody.constraints);
-
-  // Draw debug grid overlay (based on actual mesh vertices)
-  const grid = new Graphics();
-  grid.setStrokeStyle({ width: 1, color: 0xff00ff, alpha: 1 });
-  grid.x = meshPlane.x;
-  grid.y = meshPlane.y;
-  app.stage.addChild(grid);
-  grid.visible = SHOW_GRID;
-    // Move grid above mesh for visibility
-    //app.stage.setChildIndex(grid, app.stage.children.length - 1);
-
-  // Update loop for physics
+  // Ticker
   app.ticker.add(() => {
     Engine.update(engine, 1000 / 60);
-
-    // Map soft body positions to mesh vertices (Pixi v8: use 'aPosition' buffer)
-    const geomAny = meshPlane.geometry as any;
-    const posBuffer = geomAny.getBuffer?.('aPosition') || geomAny.getBuffer?.('aVertexPosition');
-    let vertices: Float32Array | null = null;
-    let flush = () => {};
-    if (posBuffer && posBuffer.data) {
-      vertices = posBuffer.data as Float32Array;
-      flush = () => posBuffer.update();
-    } else if (geomAny.positions) {
-      // Fallback for older types/versions
-      vertices = geomAny.positions as Float32Array;
-      flush = () => {};
+    if (!isRoundOver) {
+      const dt = 1 / 60; // seconds
+      playerEnergy = Math.min(MAX_ENERGY, playerEnergy + ENERGY_REGEN * dt);
+      enemyEnergy = Math.min(MAX_ENERGY, enemyEnergy + ENERGY_REGEN * dt);
+      updateEnergyBar();
+      updateButtonStates();
     }
-
-    if (vertices) {
-      const count = Math.min(softBody.bodies.length, vertices.length / 2);
-      for (let i = 0; i < count; i++) {
-        const body = softBody.bodies[i];
-        vertices[2 * i] = body.position.x - meshPlane.x;
-        vertices[2 * i + 1] = body.position.y - meshPlane.y;
-      }
-      flush();
-    }
-
-    // Redraw debug grid from current mesh vertices
-    if (vertices) {
-      grid.clear();
-      grid.setStrokeStyle({ width: 1, color: 0xff00ff, alpha: 1 });
-      const cols = gridSizeX;
-      const rows = gridSizeY;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols - 1; c++) {
-          const i0 = (r * cols + c) * 2;
-          const i1 = (r * cols + (c + 1)) * 2;
-          grid.moveTo(vertices[i0], vertices[i0 + 1]);
-          grid.lineTo(vertices[i1], vertices[i1 + 1]);
-        }
-      }
-      for (let c = 0; c < cols; c++) {
-        for (let r = 0; r < rows - 1; r++) {
-          const i0 = (r * cols + c) * 2;
-          const i1 = ((r + 1) * cols + c) * 2;
-          grid.moveTo(vertices[i0], vertices[i0 + 1]);
-          grid.lineTo(vertices[i1], vertices[i1 + 1]);
-        }
-      }
-      grid.stroke();
+    player.update();
+    enemy.update();
+    if (!isRoundOver) {
+      checkBounds(player);
+      checkBounds(enemy);
     }
   });
+
+  // AI timer
+  setInterval(
+    () => {
+      if (isRoundOver) return;
+      const choice = Math.random();
+      if (choice > 0.95 && enemyEnergy >= BLOCK_COST) {
+        enemyEnergy -= BLOCK_COST;
+        enemyTimeline.push({ type: "block" });
+      } else if (choice < 0.7 && enemyEnergy >= STOMP_COST) {
+        enemyEnergy -= STOMP_COST;
+        const power = 1 + Math.floor(Math.random() * 2);
+        enemyTimeline.push({ type: "stomp", power });
+      }
+      processEnemyActionQueue(enemy, player);
+    },
+    1500 + Math.random() * 1000,
+  );
+
+  // UI handlers
+  stompButton.addEventListener("click", () => {
+    const now = Date.now();
+    const lastAction = playerTimeline[playerTimeline.length - 1];
+    const isCombo =
+      lastAction &&
+      lastAction.type === "stomp" &&
+      now - lastStompPressTime < COMBO_WINDOW;
+    if (!isCombo && playerTimeline.length >= 4) return;
+    const cost = isCombo
+      ? STOMP_COST * Math.pow(1.5, lastAction.power)
+      : STOMP_COST;
+    if (playerEnergy < cost) return;
+    if (comboTimeout) window.clearTimeout(comboTimeout);
+    playerEnergy -= cost;
+    if (isCombo) {
+      lastAction.power += 1;
+      lastAction.comboText.innerText = `x${lastAction.power}`;
+    } else {
+      const icon = document.createElement("div");
+      icon.classList.add("timeline-icon", "stomp-icon");
+      const comboText = document.createElement("span");
+      comboText.classList.add("combo-text");
+      icon.appendChild(comboText);
+      const countdownFill = document.createElement("div");
+      countdownFill.classList.add("countdown-fill");
+      icon.appendChild(countdownFill);
+      const newAction: PlayerAction = {
+        type: "stomp",
+        power: 1,
+        icon,
+        comboText,
+        countdownFill,
+      };
+      playerTimeline.push(newAction);
+    }
+    lastStompPressTime = now;
+    updateTimeline();
+    processActionQueue(player, enemy);
+    comboTimeout = window.setTimeout(() => updateTimeline(), COMBO_WINDOW);
+  });
+
+  blockButton.addEventListener("click", () => {
+    if (playerTimeline.length >= 4) return;
+    if (playerEnergy < BLOCK_COST) return;
+    if (comboTimeout) window.clearTimeout(comboTimeout);
+    playerEnergy -= BLOCK_COST;
+    const icon = document.createElement("div");
+    icon.classList.add("timeline-icon", "block-icon");
+    const countdownFill = document.createElement("div");
+    countdownFill.classList.add("countdown-fill");
+    icon.appendChild(countdownFill);
+    const newAction: PlayerAction = { type: "block", icon, countdownFill };
+    playerTimeline.push(newAction);
+    updateTimeline();
+    processActionQueue(player, enemy);
+  });
+
+  // Helpers using our new class
+  function updateEnergyBar() {
+    energyBar.style.width = `${(playerEnergy / MAX_ENERGY) * 100}%`;
+  }
+  function updateButtonStates() {
+    let currentStompCost = STOMP_COST;
+    const lastAction = playerTimeline[playerTimeline.length - 1];
+    const now = Date.now();
+    const isTimelineFull = playerTimeline.length >= 4;
+    const isComboPossible =
+      lastAction &&
+      lastAction.type === "stomp" &&
+      now - lastStompPressTime < COMBO_WINDOW;
+    if (isComboPossible) {
+      currentStompCost = STOMP_COST * Math.pow(1.5, lastAction.power);
+      stompButton.disabled = playerEnergy < currentStompCost;
+    } else {
+      stompButton.disabled = isTimelineFull || playerEnergy < STOMP_COST;
+    }
+    blockButton.disabled = isTimelineFull || playerEnergy < BLOCK_COST;
+    stompButton.style.opacity = stompButton.disabled ? "0.5" : "1";
+    blockButton.style.opacity = blockButton.disabled ? "0.5" : "1";
+  }
+  function updateTimeline() {
+    timelineDiv.innerHTML = "";
+    playerTimeline.forEach((a) => timelineDiv.appendChild(a.icon));
+    const now = Date.now();
+    const lastAction = playerTimeline[playerTimeline.length - 1];
+    const isComboPossible =
+      lastAction &&
+      lastAction.type === "stomp" &&
+      now - lastStompPressTime < COMBO_WINDOW;
+    if (!isComboPossible) timelineDiv.appendChild(placeholderSlot);
+  }
+  function processActionQueue(self: SoftBodyCharacter, foe: SoftBodyCharacter) {
+    if (isActionTicking || playerTimeline.length === 0) return;
+    isActionTicking = true;
+    const action = playerTimeline[0];
+    action.countdownFill.classList.add("active");
+    action.countdownFill.style.animationDuration = `${ACTION_DELAY / 1000}s`;
+    activeActionTimeout = window.setTimeout(() => {
+      if (isRoundOver) return;
+      if (action.type === "stomp") {
+        self.applyStomp(foe.getCenter().x, action.power);
+      } else if (action.type === "block") {
+        self.applyBlock();
+      }
+      playerTimeline.shift();
+      updateTimeline();
+      isActionTicking = false;
+      activeActionTimeout = null;
+      processActionQueue(self, foe);
+    }, ACTION_DELAY);
+  }
+  function processEnemyActionQueue(
+    self: SoftBodyCharacter,
+    foe: SoftBodyCharacter,
+  ) {
+    if (isEnemyActionTicking || enemyTimeline.length === 0) return;
+    isEnemyActionTicking = true;
+    const action = enemyTimeline[0];
+    activeEnemyActionTimeout = window.setTimeout(
+      () => {
+        if (isRoundOver) return;
+        if (action.type === "stomp") {
+          self.applyStomp(foe.getCenter().x, action.power);
+        } else if (action.type === "block") {
+          self.applyBlock();
+        }
+        enemyTimeline.shift();
+        isEnemyActionTicking = false;
+        activeEnemyActionTimeout = null;
+        processEnemyActionQueue(self, foe);
+      },
+      ACTION_DELAY + (Math.random() * 500 - 250),
+    );
+  }
+  function checkBounds(char: SoftBodyCharacter) {
+    const c = char.getCenter();
+    if (isRoundOver) return;
+    if (c.y > platformY + 150) {
+      isRoundOver = true;
+      char.setVisible(false);
+      showMessage(char === player ? "DEFEAT" : "VICTORY!");
+      setTimeout(resetRound, 2000);
+    }
+  }
+  function resetRound() {
+    isRoundOver = false;
+    if (activeActionTimeout) window.clearTimeout(activeActionTimeout);
+    activeActionTimeout = null;
+    isActionTicking = false;
+    playerTimeline = [];
+    lastStompPressTime = 0;
+    if (comboTimeout) window.clearTimeout(comboTimeout);
+    if (activeEnemyActionTimeout) window.clearTimeout(activeEnemyActionTimeout);
+    activeEnemyActionTimeout = null;
+    isEnemyActionTicking = false;
+    enemyTimeline = [];
+    player.reset(300, 230);
+    enemy.reset(500, 230);
+    playerEnergy = MAX_ENERGY;
+    enemyEnergy = MAX_ENERGY;
+    updateEnergyBar();
+    updateTimeline();
+    hideMessage();
+  }
+  function showMessage(text: string) {
+    gameMessage.innerText = text;
+    gameMessage.style.display = "block";
+  }
+  function hideMessage() {
+    gameMessage.style.display = "none";
+  }
 })();

@@ -21,6 +21,7 @@ export type SoftBodyOptions = {
 export class SoftBodyCharacter {
   public mesh: MeshPlane;
   public bodies: Matter.Body[] = [];
+  public bodySet: Set<number> = new Set();
   public constraints: Matter.Constraint[] = [];
   public gridSizeX: number;
   public gridSizeY: number;
@@ -111,6 +112,7 @@ export class SoftBodyCharacter {
   // Reduce allowed overlap between particles during collision resolution
   (body as Matter.Body).slop = 0.01;
         this.bodies.push(body);
+  this.bodySet.add(body.id);
       }
     }
     // Constraints
@@ -337,6 +339,10 @@ export class SoftBodyCharacter {
   public setVisible(v: boolean): void {
     this.mesh.visible = v;
     if (this.gridGraphics) this.gridGraphics.visible = v && this.debug;
+  }
+
+  public ownsBody(b: Matter.Body): boolean {
+    return this.bodySet.has(b.id);
   }
 
   private tickEffects = () => {

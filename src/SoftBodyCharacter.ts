@@ -37,6 +37,11 @@ export class SoftBodyCharacter {
     app: Application,
     engine: Matter.Engine,
     options: SoftBodyOptions,
+    collision: { category: number; mask: number; group?: number } = {
+      category: 0x0001,
+      mask: 0xffff,
+      group: -1,
+    },
   ) {
     this.app = app;
     this.engine = engine;
@@ -45,6 +50,7 @@ export class SoftBodyCharacter {
     this.particleRadius = options.particleRadius ?? 5;
     this.initialDensity = options.initialDensity ?? 0.001;
     this.debug = !!options.debugGrid;
+
 
     // Create mesh plane
     this.mesh = new MeshPlane({
@@ -55,11 +61,10 @@ export class SoftBodyCharacter {
     if (options.scale && options.scale !== 1) {
       this.mesh.scale.set(options.scale);
     }
-
-    // Mirror horizontally if requested
+    // Flip texture visually if mirror is true (not mesh vertices)
     if (options.mirror) {
-      this.mesh.scale.x *= -1;
-      // Ensure pivot is at (0,0); flipping around origin is OK for now
+      this.mesh.scale.x = -Math.abs(this.mesh.scale.x);
+      this.mesh.x += this.mesh.width;
     }
 
     this.mesh.x = options.x;
@@ -83,6 +88,12 @@ export class SoftBodyCharacter {
       frictionAir: options.frictionAir ?? 0.03,
       restitution: options.restitution ?? 0.1,
       density: this.initialDensity,
+      collisionFilter: {
+        // Disable self-collision within a character via negative group
+        group: collision.group ?? -1,
+        category: collision.category,
+        mask: collision.mask,
+      },
     } as Matter.IBodyDefinition;
     const stiffness = options.stiffness ?? 0.1;
     const damping = options.damping ?? 0.3;
@@ -91,12 +102,14 @@ export class SoftBodyCharacter {
     // Particles
     for (let y = 0; y < this.gridSizeY; y++) {
       for (let x = 0; x < this.gridSizeX; x++) {
-        const body = Matter.Bodies.circle(
+  const body = Matter.Bodies.circle(
           this.mesh.x + x * columnGap,
           this.mesh.y + y * rowGap,
           this.particleRadius,
           particleOptions,
         );
+  // Reduce allowed overlap between particles during collision resolution
+  (body as Matter.Body).slop = 0.01;
         this.bodies.push(body);
       }
     }

@@ -18,21 +18,30 @@ body {
 #pixi-container {
     border-radius: 15px;
     overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
 }
 
 /* UI Panel */
 #ui-panel {
-    position: relative;
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
     display: flex;
     justify-content: space-around;
     align-items: center;
     width: 800px;
     max-width: 95vw;
-    margin-top: 12px;
     padding: 10px;
     background-color: #e9e9e9;
     border-radius: 10px;
     overflow: hidden;
+    z-index: 10;
 }
 
 #energy-bar-container {
@@ -69,16 +78,20 @@ body {
 #block-button { background-color: #6a737b; }
 
 #timeline {
+    position: absolute;
+    left: 50%;
+    bottom: 80px;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
     height: 40px;
     padding: 5px;
-    margin-top: 10px;
     background-color: #fff;
     border: 2px solid #ddd;
     border-radius: 10px;
     min-width: 200px;
     max-width: 800px;
+    z-index: 10;
 }
 
 .timeline-icon {

@@ -1,7 +1,8 @@
-import { Application, Assets } from "pixi.js";
+import { Application, Assets, Graphics } from "pixi.js";
 import Matter from "matter-js";
 import { SoftBodyCharacter } from "./SoftBodyCharacter";
 
+const debugMode = true;
 // Gameplay constants (ported from prototype)
 const MAX_ENERGY = 100;
 const ENERGY_REGEN = 25; // per second
@@ -12,14 +13,14 @@ const COMBO_WINDOW = 1000; // ms
 
 // Soft body config
 const SOFT_CFG = {
-  stiffness: 0.1,
-  damping: 0.3,
-  particleRadius: 5,
+  stiffness: 0.5,
+  damping: 0.1,
+  particleRadius: 7,
   gravity: 1.0,
-  frictionAir: 0.03,
-  restitution: 0.1,
-  gridSizeX: 4,
-  gridSizeY: 5,
+  frictionAir: 0.1,
+  restitution: 0.2,
+  gridSizeX: 6,
+  gridSizeY: 7,
 };
 
 // UI refs
@@ -38,12 +39,12 @@ placeholderSlot.className = "placeholder-slot";
 // Game state
 type PlayerAction =
   | {
-      type: "stomp";
-      power: number;
-      icon: HTMLDivElement;
-      comboText: HTMLSpanElement;
-      countdownFill: HTMLDivElement;
-    }
+    type: "stomp";
+    power: number;
+    icon: HTMLDivElement;
+    comboText: HTMLSpanElement;
+    countdownFill: HTMLDivElement;
+  }
   | { type: "block"; icon: HTMLDivElement; countdownFill: HTMLDivElement };
 type EnemyAction = { type: "stomp"; power: number } | { type: "block" };
 let playerEnergy = MAX_ENERGY;
@@ -60,48 +61,71 @@ let comboTimeout: number | null = null;
 
 (async () => {
   const app = new Application();
-  await app.init({ background: "#fafafa", width: 800, height: 330 });
+  await app.init({ background: "whitesmoke", resizeTo: window });
   document.getElementById("pixi-container")!.appendChild(app.canvas);
 
   // Matter world
   const { Engine, World, Bodies } = Matter;
   const engine = Engine.create();
   engine.world.gravity.y = SOFT_CFG.gravity;
+  // Improve solver stability: more iterations to reduce overlap under load
+  engine.positionIterations = 8; // default 6
+  engine.velocityIterations = 8; // default 4
+  engine.constraintIterations = 4; // default 2
 
   // Platform & bounds
-  const platformWidth = 500;
+  const platformWidth = 900;
   const platformHeight = 40;
-  const platformX = 400;
-  const platformY = 300;
+  const platformX = 500;
+  const platformY = 500;
   const ground = Bodies.rectangle(
     platformX,
     platformY,
     platformWidth,
     platformHeight,
-    { isStatic: true, label: "platform" },
+    {
+      isStatic: true,
+      label: "platform",
+      collisionFilter: {
+        category: 0x0004, // environment
+        mask: 0xffff,
+      },
+    },
   );
   const leftWall = Bodies.rectangle(
     -50,
     app.screen.height / 2,
     100,
     app.screen.height,
-    { isStatic: true },
+    { isStatic: true, collisionFilter: { category: 0x0004, mask: 0xffff } },
   );
   const rightWall = Bodies.rectangle(
     app.screen.width + 50,
     app.screen.height / 2,
     100,
     app.screen.height,
-    { isStatic: true },
+    { isStatic: true, collisionFilter: { category: 0x0004, mask: 0xffff } },
   );
   const ceiling = Bodies.rectangle(
     app.screen.width / 2,
     -50,
     app.screen.width,
     100,
-    { isStatic: true },
+    { isStatic: true, collisionFilter: { category: 0x0004, mask: 0xffff } },
   );
+
   World.add(engine.world, [ground, leftWall, rightWall, ceiling]);
+
+  // Visualize the floor/platform
+  const floorGraphics = app.stage.addChild(new Graphics());
+  floorGraphics.beginFill(0x8B4513, 0.8); // brown
+  floorGraphics.drawRect(
+    platformX - platformWidth / 2,
+    platformY - platformHeight / 2,
+    platformWidth,
+    platformHeight
+  );
+  floorGraphics.endFill();
 
   // Load textures
   const [duckTexture, kapibaraTexture] = await Promise.all([
@@ -111,7 +135,7 @@ let comboTimeout: number | null = null;
 
   // Create characters
   const player = new SoftBodyCharacter(app, engine, {
-    x: 300,
+    x: 250,
     y: 230,
     texture: duckTexture,
     gridSizeX: SOFT_CFG.gridSizeX,
@@ -121,11 +145,11 @@ let comboTimeout: number | null = null;
     damping: SOFT_CFG.damping,
     frictionAir: SOFT_CFG.frictionAir,
     restitution: SOFT_CFG.restitution,
-  debugGrid: true,
-    scale: 0.7,
-  });
+    debugGrid: debugMode,
+    scale: 1,
+  }, { category: 0x0001, mask: 0x0002 | 0x0004, group: -1 }); // collide with enemy+env, no self-collisions
   const enemy = new SoftBodyCharacter(app, engine, {
-    x: 500,
+    x: 550,
     y: 230,
     texture: kapibaraTexture,
     gridSizeX: SOFT_CFG.gridSizeX,
@@ -135,10 +159,10 @@ let comboTimeout: number | null = null;
     damping: SOFT_CFG.damping,
     frictionAir: SOFT_CFG.frictionAir,
     restitution: SOFT_CFG.restitution,
-  debugGrid: true,
-    mirror: true,
-    scale: 0.7,
-  });
+    debugGrid: debugMode,
+    mirror: false ,
+    scale: 1,
+  }, { category: 0x0002, mask: 0x0001 | 0x0004, group: -2 }); // collide with player+env, no self-collisions
 
   // Ticker
   app.ticker.add(() => {

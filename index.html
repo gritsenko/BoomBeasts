@@ -1,32 +1,26 @@
-<!DOCTYPE html>
-<html lang="ru">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boom Beasts Prototype (Sequential Combo)</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/style.css">
+    <title>PixiJS - Template</title>
 </head>
+
 <body>
-
-<div id="game-container">
-    <div id="phaser-game"></div>
-    <div id="timeline"></div>
-    <div id="ui-panel">
-        <div id="energy-bar-container">
-            <div id="energy-bar"></div>
+    <div id="app">
+        <div id="pixi-container"></div>
+        <div id="timeline"></div>
+        <div id="ui-panel">
+            <div id="energy-bar-container">
+                <div id="energy-bar"></div>
+            </div>
+            <button id="stomp-button" class="action-button">Stomp</button>
+            <button id="block-button" class="action-button">Block</button>
         </div>
-        <button id="stomp-button" class="action-button">Топот</button>
-        <button id="block-button" class="action-button">Блок</button>
+        <div id="game-message"></div>
     </div>
-    <div id="game-message"></div>
-</div>
-
-<script type="module" src="script.js"></script>
+    <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
-
-
-
-
-

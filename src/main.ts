@@ -129,8 +129,8 @@ let comboTimeout: number | null = null;
 
   // Load textures
   const [duckTexture, kapibaraTexture] = await Promise.all([
-    Assets.load("/assets/sprites/duck.png"),
-    Assets.load("/assets/sprites/kapibara.png"),
+    Assets.load("./assets/sprites/duck.png"),
+    Assets.load("./assets/sprites/kapibara.png"),
   ]);
 
   // Create characters

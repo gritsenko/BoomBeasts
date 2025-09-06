@@ -52,7 +52,6 @@ export class SoftBodyCharacter {
     this.initialDensity = options.initialDensity ?? 0.001;
     this.debug = !!options.debugGrid;
 
-
     // Create mesh plane
     this.mesh = new MeshPlane({
       texture: options.texture,
@@ -103,16 +102,16 @@ export class SoftBodyCharacter {
     // Particles
     for (let y = 0; y < this.gridSizeY; y++) {
       for (let x = 0; x < this.gridSizeX; x++) {
-  const body = Matter.Bodies.circle(
+        const body = Matter.Bodies.circle(
           this.mesh.x + x * columnGap,
           this.mesh.y + y * rowGap,
           this.particleRadius,
           particleOptions,
         );
-  // Reduce allowed overlap between particles during collision resolution
-  (body as Matter.Body).slop = 0.01;
+        // Reduce allowed overlap between particles during collision resolution
+        (body as Matter.Body).slop = 0.01;
         this.bodies.push(body);
-  this.bodySet.add(body.id);
+        this.bodySet.add(body.id);
       }
     }
     // Constraints

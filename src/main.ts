@@ -39,12 +39,12 @@ placeholderSlot.className = "placeholder-slot";
 // Game state
 type PlayerAction =
   | {
-    type: "stomp";
-    power: number;
-    icon: HTMLDivElement;
-    comboText: HTMLSpanElement;
-    countdownFill: HTMLDivElement;
-  }
+      type: "stomp";
+      power: number;
+      icon: HTMLDivElement;
+      comboText: HTMLSpanElement;
+      countdownFill: HTMLDivElement;
+    }
   | { type: "block"; icon: HTMLDivElement; countdownFill: HTMLDivElement };
 type EnemyAction = { type: "stomp"; power: number } | { type: "block" };
 let playerEnergy = MAX_ENERGY;
@@ -118,12 +118,12 @@ let comboTimeout: number | null = null;
 
   // Visualize the floor/platform
   const floorGraphics = app.stage.addChild(new Graphics());
-  floorGraphics.beginFill(0x8B4513, 0.8); // brown
+  floorGraphics.beginFill(0x8b4513, 0.8); // brown
   floorGraphics.drawRect(
     platformX - platformWidth / 2,
     platformY - platformHeight / 2,
     platformWidth,
-    platformHeight
+    platformHeight,
   );
   floorGraphics.endFill();
 
@@ -134,110 +134,136 @@ let comboTimeout: number | null = null;
   ]);
 
   // Create characters
-  const player = new SoftBodyCharacter(app, engine, {
-    x: 250,
-    y: 230,
-    texture: duckTexture,
-    gridSizeX: SOFT_CFG.gridSizeX,
-    gridSizeY: SOFT_CFG.gridSizeY,
-    particleRadius: SOFT_CFG.particleRadius,
-    stiffness: SOFT_CFG.stiffness,
-    damping: SOFT_CFG.damping,
-    frictionAir: SOFT_CFG.frictionAir,
-    restitution: SOFT_CFG.restitution,
-    debugGrid: debugMode,
-    scale: 1,
-  }, { category: 0x0001, mask: 0x0002 | 0x0004, group: -1 }); // collide with enemy+env, no self-collisions
-  const enemy = new SoftBodyCharacter(app, engine, {
-    x: 550,
-    y: 230,
-    texture: kapibaraTexture,
-    gridSizeX: SOFT_CFG.gridSizeX,
-    gridSizeY: SOFT_CFG.gridSizeY,
-    particleRadius: SOFT_CFG.particleRadius,
-    stiffness: SOFT_CFG.stiffness,
-    damping: SOFT_CFG.damping,
-    frictionAir: SOFT_CFG.frictionAir,
-    restitution: SOFT_CFG.restitution,
-    debugGrid: debugMode,
-    mirror: false ,
-    scale: 1,
-  }, { category: 0x0002, mask: 0x0001 | 0x0004, group: -2 }); // collide with player+env, no self-collisions
+  const player = new SoftBodyCharacter(
+    app,
+    engine,
+    {
+      x: 250,
+      y: 230,
+      texture: duckTexture,
+      gridSizeX: SOFT_CFG.gridSizeX,
+      gridSizeY: SOFT_CFG.gridSizeY,
+      particleRadius: SOFT_CFG.particleRadius,
+      stiffness: SOFT_CFG.stiffness,
+      damping: SOFT_CFG.damping,
+      frictionAir: SOFT_CFG.frictionAir,
+      restitution: SOFT_CFG.restitution,
+      debugGrid: debugMode,
+      scale: 1,
+    },
+    { category: 0x0001, mask: 0x0002 | 0x0004, group: -1 },
+  ); // collide with enemy+env, no self-collisions
+  const enemy = new SoftBodyCharacter(
+    app,
+    engine,
+    {
+      x: 550,
+      y: 230,
+      texture: kapibaraTexture,
+      gridSizeX: SOFT_CFG.gridSizeX,
+      gridSizeY: SOFT_CFG.gridSizeY,
+      particleRadius: SOFT_CFG.particleRadius,
+      stiffness: SOFT_CFG.stiffness,
+      damping: SOFT_CFG.damping,
+      frictionAir: SOFT_CFG.frictionAir,
+      restitution: SOFT_CFG.restitution,
+      debugGrid: debugMode,
+      mirror: false,
+      scale: 1,
+    },
+    { category: 0x0002, mask: 0x0001 | 0x0004, group: -2 },
+  ); // collide with player+env, no self-collisions
 
   // Collision-based push: when player and enemy particles collide, apply
   // opposing forces along the contact direction to simulate a shove.
-  Events.on(engine, "collisionActive", (evt: any) => {
-    const pairs = evt.pairs as Array<any>;
-    for (const pair of pairs) {
-      const a = pair.bodyA as Matter.Body;
-      const b = pair.bodyB as Matter.Body;
-      const aIsPlayer = player.ownsBody(a);
-      const bIsPlayer = player.ownsBody(b);
-      const aIsEnemy = enemy.ownsBody(a);
-      const bIsEnemy = enemy.ownsBody(b);
-      if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
+  Events.on(
+    engine,
+    "collisionActive",
+    (evt: Matter.IEventCollision<Matter.Engine>) => {
+      const pairs = evt.pairs as Matter.Pair[];
+      for (const pair of pairs) {
+        const a = pair.bodyA as Matter.Body;
+        const b = pair.bodyB as Matter.Body;
+        const aIsPlayer = player.ownsBody(a);
+        const bIsPlayer = player.ownsBody(b);
+        const aIsEnemy = enemy.ownsBody(a);
+        const bIsEnemy = enemy.ownsBody(b);
+        if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
 
-      // Direction from A to B
-      const dir = {
-        x: b.position.x - a.position.x,
-        y: b.position.y - a.position.y,
-      };
-      const len = Math.hypot(dir.x, dir.y) || 1;
-      dir.x /= len;
-      dir.y /= len;
+        // Direction from A to B
+        const dir = {
+          x: b.position.x - a.position.x,
+          y: b.position.y - a.position.y,
+        };
+        const len = Math.hypot(dir.x, dir.y) || 1;
+        dir.x /= len;
+        dir.y /= len;
 
-      // Relative velocity along the normal (closing speed)
-      const relVel = {
-        x: b.velocity.x - a.velocity.x,
-        y: b.velocity.y - a.velocity.y,
-      };
-      const closingSpeed = relVel.x * dir.x + relVel.y * dir.y; // >0 means B moving away
+        // Relative velocity along the normal (closing speed)
+        const relVel = {
+          x: b.velocity.x - a.velocity.x,
+          y: b.velocity.y - a.velocity.y,
+        };
+        const closingSpeed = relVel.x * dir.x + relVel.y * dir.y; // >0 means B moving away
 
-      // Overlap depth estimate (if available); otherwise 0
-      const overlap = Math.max(0, -(pair.separation ?? 0));
+        // Overlap depth estimate (if available); otherwise 0
+        const overlap = Math.max(0, -(pair.separation ?? 0));
 
-      // Stronger continuous push scaled by closing and overlap
-      const base = 0.3; // was 0.0006
-      const pushMag = Math.min(
-        0.12,
-        base + (closingSpeed < 0 ? -closingSpeed * 0.004 : 0) + overlap * 0.004,
-      );
+        // Stronger continuous push scaled by closing and overlap
+        const base = 0.3; // was 0.0006
+        const pushMag = Math.min(
+          0.12,
+          base +
+            (closingSpeed < 0 ? -closingSpeed * 0.004 : 0) +
+            overlap * 0.004,
+        );
 
-      const pushA = { x: -dir.x * pushMag, y: -dir.y * pushMag };
-      const pushB = { x: dir.x * pushMag, y: dir.y * pushMag };
+        const pushA = { x: -dir.x * pushMag, y: -dir.y * pushMag };
+        const pushB = { x: dir.x * pushMag, y: dir.y * pushMag };
 
-      Body.applyForce(a, a.position, pushA);
-      Body.applyForce(b, b.position, pushB);
-    }
-  });
+        Body.applyForce(a, a.position, pushA);
+        Body.applyForce(b, b.position, pushB);
+      }
+    },
+  );
 
   // One-shot burst at contact begin to separate more decisively
-  Events.on(engine, "collisionStart", (evt: any) => {
-    const pairs = evt.pairs as Array<any>;
-    for (const pair of pairs) {
-      const a = pair.bodyA as Matter.Body;
-      const b = pair.bodyB as Matter.Body;
-      const aIsPlayer = player.ownsBody(a);
-      const bIsPlayer = player.ownsBody(b);
-      const aIsEnemy = enemy.ownsBody(a);
-      const bIsEnemy = enemy.ownsBody(b);
-      if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
+  Events.on(
+    engine,
+    "collisionStart",
+    (evt: Matter.IEventCollision<Matter.Engine>) => {
+      const pairs = evt.pairs as Matter.Pair[];
+      for (const pair of pairs) {
+        const a = pair.bodyA as Matter.Body;
+        const b = pair.bodyB as Matter.Body;
+        const aIsPlayer = player.ownsBody(a);
+        const bIsPlayer = player.ownsBody(b);
+        const aIsEnemy = enemy.ownsBody(a);
+        const bIsEnemy = enemy.ownsBody(b);
+        if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
 
-      const dir = {
-        x: b.position.x - a.position.x,
-        y: b.position.y - a.position.y,
-      };
-      const len = Math.hypot(dir.x, dir.y) || 1;
-      dir.x /= len;
-      dir.y /= len;
+        const dir = {
+          x: b.position.x - a.position.x,
+          y: b.position.y - a.position.y,
+        };
+        const len = Math.hypot(dir.x, dir.y) || 1;
+        dir.x /= len;
+        dir.y /= len;
 
-      const overlap = Math.max(0, -(pair.separation ?? 0));
-      // Velocity kick (delta-v), capped
-      const kick = Math.min(1.2, 0.4 + overlap * 1.0);
-      Body.setVelocity(a, { x: a.velocity.x - dir.x * kick, y: a.velocity.y - dir.y * kick });
-      Body.setVelocity(b, { x: b.velocity.x + dir.x * kick, y: b.velocity.y + dir.y * kick });
-    }
-  });
+        const overlap = Math.max(0, -(pair.separation ?? 0));
+        // Velocity kick (delta-v), capped
+        const kick = Math.min(1.2, 0.4 + overlap * 1.0);
+        Body.setVelocity(a, {
+          x: a.velocity.x - dir.x * kick,
+          y: a.velocity.y - dir.y * kick,
+        });
+        Body.setVelocity(b, {
+          x: b.velocity.x + dir.x * kick,
+          y: b.velocity.y + dir.y * kick,
+        });
+      }
+    },
+  );
 
   // Ticker
   app.ticker.add(() => {

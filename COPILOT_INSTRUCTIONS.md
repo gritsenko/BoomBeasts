@@ -9,6 +9,7 @@ This document provides guidelines for using GitHub Copilot in the BoomBeasts pro
 - Use the `npm run format` command to auto-format Copilot-generated code before each commit.
 - Review Copilot suggestions for logic errors, security issues, and project-specific conventions.
 - Do not commit code that fails Prettier or lint checks.
+- Do not invoke the command `npm run dev` since the dev server is always running anyway.
 
 ## Recommended Editor Settings
 - Install the Prettier extension for your editor and enable format-on-save.

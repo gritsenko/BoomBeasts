@@ -1,4 +1,4 @@
-import { Application, Graphics, MeshPlane, Texture } from "pixi.js";
+import { Application, Graphics, MeshPlane, Texture, Container } from "pixi.js";
 import Matter from "matter-js";
 
 export type SoftBodyOptions = {
@@ -18,6 +18,7 @@ export type SoftBodyOptions = {
   scale?: number; // uniform
   stompVerticalForce?: number;
   stompHorizontalForce?: number;
+  container?: Container; // Add container option
 };
 
 export class SoftBodyCharacter {
@@ -41,6 +42,7 @@ export class SoftBodyCharacter {
   private gridGraphics: Graphics | null = null;
   private shockwaves: { g: Graphics; life: number; maxLife: number }[] = [];
   private blockTimer: number | null = null;
+  private container: Container | null = null;
   // Soft-layer collision category (visual-only collisions with floor/other soft)
   private static readonly SOFT_CATEGORY = 0x0008;
   private static readonly ENV_CATEGORY = 0x0004;
@@ -64,6 +66,7 @@ export class SoftBodyCharacter {
     this.stompVerticalForce = options.stompVerticalForce ?? -0.24;
     this.stompHorizontalForce = options.stompHorizontalForce ?? 0.24;
     this.debug = !!options.debugGrid;
+    this.container = options.container || null;
 
     // Create mesh plane
     this.mesh = new MeshPlane({
@@ -82,14 +85,17 @@ export class SoftBodyCharacter {
 
     this.mesh.x = options.x;
     this.mesh.y = options.y;
-    this.app.stage.addChild(this.mesh);
+    
+    // Add mesh to container or stage
+    const targetContainer = this.container || this.app.stage;
+    targetContainer.addChild(this.mesh);
 
     if (this.debug) {
       this.gridGraphics = new Graphics();
       this.gridGraphics.setStrokeStyle({ width: 1, color: 0xff00ff, alpha: 1 });
       this.gridGraphics.x = this.mesh.x;
       this.gridGraphics.y = this.mesh.y;
-      this.app.stage.addChild(this.gridGraphics);
+      targetContainer.addChild(this.gridGraphics);
     }
 
     // Create solid gameplay collider (circle) — only this participates in gameplay
@@ -344,7 +350,8 @@ export class SoftBodyCharacter {
     g.rect(-size / 2, -size / 2, size, size);
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
-    this.app.stage.addChild(g);
+    const targetContainer = this.container || this.app.stage;
+    targetContainer.addChild(g);
     // Draw stroke once per frame via stroke() call in tick
     this.shockwaves.push({ g, life: 0, maxLife: 18 }); // ~0.3s at 60fps
   }
@@ -362,7 +369,8 @@ export class SoftBodyCharacter {
     g.rect(-50, -50, 100, 100);
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
-    this.app.stage.addChild(g);
+    const targetContainer = this.container || this.app.stage;
+    targetContainer.addChild(g);
     this.shockwaves.push({ g, life: 0, maxLife: 60 });
 
     this.blockTimer = window.setTimeout(() => {

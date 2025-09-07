@@ -5,6 +5,43 @@ import { SoftBodyCharacter } from "./SoftBodyCharacter";
 // Prevent right-click context menu
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// Safe area configuration
+const SAFE_AREA_SIZE = 700; // 700x700 pixels safe area
+let currentScale = 1;
+let safeAreaOffsetX = 0;
+let safeAreaOffsetY = 0;
+
+// Game container for camera-like scaling
+let gameContainer: Container | null = null;
+
+// Function to handle window resize and scale the viewport
+function handleResize(app: Application) {
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+
+  // Calculate scale to fit the safe area into the window
+  const scaleX = windowWidth / SAFE_AREA_SIZE;
+  const scaleY = windowHeight / SAFE_AREA_SIZE;
+  currentScale = Math.min(scaleX, scaleY);
+
+  // Center the safe area
+  safeAreaOffsetX = (windowWidth - SAFE_AREA_SIZE * currentScale) / 2;
+  safeAreaOffsetY = (windowHeight - SAFE_AREA_SIZE * currentScale) / 2;
+
+  // Apply scale to the game container (camera-like scaling)
+  if (gameContainer) {
+    gameContainer.scale.set(currentScale);
+  // Position the game container so the safe-area pivot is centered in the viewport
+  gameContainer.position.set(windowWidth / 2, windowHeight / 2);
+  }
+
+  // Update canvas size to match window
+  app.canvas.style.width = `${windowWidth}px`;
+  app.canvas.style.height = `${windowHeight}px`;
+
+  console.log(`Resize: ${windowWidth}x${windowHeight}, Scale: ${currentScale.toFixed(2)}, Offset: ${safeAreaOffsetX.toFixed(0)}, ${safeAreaOffsetY.toFixed(0)}`);
+}
+
 let debugMode = false; // Debug view disabled by default
 
 // Gameplay constants (ported from prototype)
@@ -71,6 +108,9 @@ let comboTimeout: number | null = null;
   await app.init({ background: "whitesmoke", resizeTo: window });
   document.getElementById("pixi-container")!.appendChild(app.canvas);
 
+  // Add window resize listener
+  window.addEventListener('resize', () => handleResize(app));
+
     // Setup debug hotkey after player/enemy are created
   window.addEventListener("keydown", (e) => {
     // Toggle debug view with D
@@ -90,11 +130,11 @@ let comboTimeout: number | null = null;
   engine.velocityIterations = 8; // default 4
   engine.constraintIterations = 4; // default 2
 
-  // Platform & bounds
-  const platformWidth = 900;
+  // Platform & bounds - back to original positioning
+  const platformWidth = 500;
   const platformHeight = 40;
-  const platformX = 500;
-  const platformY = 500;
+  const platformX = 350;
+  const platformY = 450;
   const ground = Bodies.rectangle(
     platformX,
     platformY,
@@ -133,8 +173,16 @@ let comboTimeout: number | null = null;
 
   World.add(engine.world, [ground, leftWall, rightWall, ceiling]);
 
+  // Create game container for camera-like scaling
+  gameContainer = new Container();
+  // Set pivot to center of the safe area so scaling centers correctly
+  gameContainer.pivot.set(SAFE_AREA_SIZE / 2, SAFE_AREA_SIZE / 2);
+  // Position gameContainer initially at center of canvas
+  gameContainer.position.set(window.innerWidth / 2, window.innerHeight / 2);
+  app.stage.addChild(gameContainer);
+
   // Visualize the floor/platform
-  const floorGraphics = app.stage.addChild(new Graphics());
+  const floorGraphics = gameContainer.addChild(new Graphics());
   floorGraphics.beginFill(0x8b4513, 0.8); // brown
   floorGraphics.drawRect(
     platformX - platformWidth / 2,
@@ -146,9 +194,23 @@ let comboTimeout: number | null = null;
 
   // Debug overlay (wireframes)
   const debugContainer = new Container();
+  debugContainer.visible = false; // Initially hidden
+  // Ensure debug overlay aligns with gameContainer origin
+  debugContainer.position.set(0, 0);
   const debugBodies = new Graphics();
+  debugBodies.position.set(0, 0);
   debugContainer.addChild(debugBodies);
-  app.stage.addChild(debugContainer);
+  
+  // Safe frame visualization
+  const safeFrameGraphics = new Graphics();
+  safeFrameGraphics.setStrokeStyle({ width: 3, color: 0xff0000, alpha: 0.8 }); // Red border
+  // Draw safe frame centered around pivot (pivot is at SAFE_AREA center)
+  safeFrameGraphics.position.set(0, 0);
+  safeFrameGraphics.rect(-SAFE_AREA_SIZE / 2, -SAFE_AREA_SIZE / 2, SAFE_AREA_SIZE, SAFE_AREA_SIZE);
+  safeFrameGraphics.stroke();
+  debugContainer.addChild(safeFrameGraphics);
+  
+  gameContainer.addChild(debugContainer);
 
   // Load textures
   const [duckTexture, kapibaraTexture] = await Promise.all([
@@ -156,7 +218,7 @@ let comboTimeout: number | null = null;
     Assets.load("./assets/sprites/kapibara.png"),
   ]);
 
-  // Create characters
+  // Create characters - back to original positioning
   const player = new SoftBodyCharacter(
     app,
     engine,
@@ -175,6 +237,7 @@ let comboTimeout: number | null = null;
       stompHorizontalForce: SOFT_CFG.stompHorizontalForce,
       debugGrid: true,
       scale: 1,
+      container: gameContainer || undefined,
     },
     { category: 0x0001, mask: 0x0002 | 0x0004, group: -1 },
   ); // collide with enemy+env, no self-collisions
@@ -197,9 +260,15 @@ let comboTimeout: number | null = null;
       debugGrid: true,
       mirror: false,
       scale: 1,
+      container: gameContainer || undefined,
     },
     { category: 0x0002, mask: 0x0001 | 0x0004, group: -2 },
   ); // collide with player+env, no self-collisions
+
+  // Apply initial scaling after everything is set up
+  handleResize(app);
+
+  // No need to manually move graphics - they're now added to gameContainer directly
 
   // Collision-based push between SOLID colliders only
   Events.on(
@@ -304,7 +373,7 @@ let comboTimeout: number | null = null;
 
     // Draw debug wireframes
     if (debugMode) {
-      debugBodies.visible = true;
+      debugContainer.visible = true;
       debugBodies.clear();
       const thin = { width: 1, color: 0x333333 as const, alpha: 0.9 };
       debugBodies.setStrokeStyle(thin);
@@ -342,7 +411,7 @@ let comboTimeout: number | null = null;
         enemy.setDebugGridVisible(true);
       }
     } else {
-      debugBodies.visible = false;
+      debugContainer.visible = false;
       player.mesh.alpha = 1.0; // Full opacity when not in debug mode
       enemy.mesh.alpha = 1.0;
       if (player && typeof player.setDebugGridVisible === "function") {

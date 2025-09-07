@@ -16,6 +16,8 @@ export type SoftBodyOptions = {
   debugGrid?: boolean;
   mirror?: boolean;
   scale?: number; // uniform
+  stompVerticalForce?: number;
+  stompHorizontalForce?: number;
 };
 
 export class SoftBodyCharacter {
@@ -26,10 +28,13 @@ export class SoftBodyCharacter {
   // Solid gameplay collider and a static driver that tethers the soft grid
   public solid: Matter.Body;
   private driver: Matter.Body;
+  private solidRadius: number;
   public gridSizeX: number;
   public gridSizeY: number;
   public particleRadius: number;
   public initialDensity: number;
+  public stompVerticalForce: number;
+  public stompHorizontalForce: number;
   public app: Application;
   public engine: Matter.Engine;
   private debug: boolean;
@@ -56,6 +61,8 @@ export class SoftBodyCharacter {
     this.gridSizeY = options.gridSizeY;
     this.particleRadius = options.particleRadius ?? 5;
     this.initialDensity = options.initialDensity ?? 0.001;
+    this.stompVerticalForce = options.stompVerticalForce ?? -0.24;
+    this.stompHorizontalForce = options.stompHorizontalForce ?? 0.24;
     this.debug = !!options.debugGrid;
 
     // Create mesh plane
@@ -87,9 +94,10 @@ export class SoftBodyCharacter {
 
     // Create solid gameplay collider (circle) — only this participates in gameplay
     const centerX = this.mesh.x + this.mesh.width / 2;
-    const centerY = this.mesh.y + this.mesh.height / 2;
-    const solidRadius = Math.max(this.mesh.width, this.mesh.height) * 0.35;
-    this.solid = Matter.Bodies.circle(centerX, centerY, solidRadius, {
+    // Bottom-align the solid with the soft mesh to avoid squashing from center alignment
+    this.solidRadius = Math.max(this.mesh.width, this.mesh.height) * 0.40;
+    const centerY = this.mesh.y + this.mesh.height - this.solidRadius;
+    this.solid = Matter.Bodies.circle(centerX, centerY, this.solidRadius, {
       friction: 0.2,
       frictionStatic: 0.5,
       frictionAir: options.frictionAir ?? 0.02,
@@ -317,8 +325,8 @@ export class SoftBodyCharacter {
   public applyStomp(targetX: number, power: number): void {
     const b = this.solid;
     const dir = Math.sign(targetX - b.position.x) || 1;
-    const verticalForce = -0.04 * power;
-    const horizontalForce = dir * 0.05 * power;
+    const verticalForce = this.stompVerticalForce * power;
+    const horizontalForce = dir * this.stompHorizontalForce * power;
     Matter.Body.applyForce(b, b.position, {
       x: horizontalForce,
       y: verticalForce,
@@ -382,7 +390,8 @@ export class SoftBodyCharacter {
       }
     }
     const cx = x + this.mesh.width / 2;
-    const cy = y + this.mesh.height / 2;
+    // Keep solid bottom edge aligned with soft mesh bottom edge
+    const cy = y + this.mesh.height - this.solidRadius;
     Matter.Body.setPosition(this.driver, { x: cx, y: cy });
     Matter.Body.setVelocity(this.driver, { x: 0, y: 0 });
     Matter.Body.setPosition(this.solid, { x: cx, y: cy });
@@ -397,6 +406,13 @@ export class SoftBodyCharacter {
   public setVisible(v: boolean): void {
     this.mesh.visible = v;
     if (this.gridGraphics) this.gridGraphics.visible = v && this.debug;
+  }
+
+  /**
+   * Show/hide debug grid overlay (purple grid) based on global debug mode.
+   */
+  public setDebugGridVisible(v: boolean): void {
+    if (this.gridGraphics) this.gridGraphics.visible = v;
   }
 
   public ownsBody(b: Matter.Body): boolean {

@@ -2,7 +2,11 @@ import { Application, Assets, Graphics, Container } from "pixi.js";
 import Matter from "matter-js";
 import { SoftBodyCharacter } from "./SoftBodyCharacter";
 
-const debugMode = true;
+// Prevent right-click context menu
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+let debugMode = false; // Debug view disabled by default
+
 // Gameplay constants (ported from prototype)
 const MAX_ENERGY = 100;
 const ENERGY_REGEN = 25; // per second
@@ -17,10 +21,13 @@ const SOFT_CFG = {
   damping: 0.1,
   particleRadius: 7,
   gravity: 1.0,
-  frictionAir: 0.1,
+  frictionAir: 0.05,
   restitution: 0.2,
-  gridSizeX: 6,
-  gridSizeY: 7,
+  gridSizeX: 7,
+  gridSizeY: 8,
+  // Stomp force configuration (applied to solid body)
+  stompVerticalForce: -15, // Base vertical force (will be multiplied by power)
+  stompHorizontalForce: 20, // Base horizontal force (will be multiplied by power and direction)
 };
 
 // UI refs
@@ -63,6 +70,16 @@ let comboTimeout: number | null = null;
   const app = new Application();
   await app.init({ background: "whitesmoke", resizeTo: window });
   document.getElementById("pixi-container")!.appendChild(app.canvas);
+
+    // Setup debug hotkey after player/enemy are created
+  window.addEventListener("keydown", (e) => {
+    // Toggle debug view with D
+    if (e.key === "d") {
+      debugMode = !debugMode;
+      player.setDebugGridVisible(debugMode);
+      enemy.setDebugGridVisible(debugMode);
+    }
+  });
 
   // Matter world
   const { Engine, World, Bodies, Events, Body } = Matter;
@@ -154,6 +171,8 @@ let comboTimeout: number | null = null;
       damping: SOFT_CFG.damping,
       frictionAir: SOFT_CFG.frictionAir,
       restitution: SOFT_CFG.restitution,
+      stompVerticalForce: SOFT_CFG.stompVerticalForce,
+      stompHorizontalForce: SOFT_CFG.stompHorizontalForce,
       debugGrid: true,
       scale: 1,
     },
@@ -173,6 +192,8 @@ let comboTimeout: number | null = null;
       damping: SOFT_CFG.damping,
       frictionAir: SOFT_CFG.frictionAir,
       restitution: SOFT_CFG.restitution,
+      stompVerticalForce: SOFT_CFG.stompVerticalForce,
+      stompHorizontalForce: SOFT_CFG.stompHorizontalForce,
       debugGrid: true,
       mirror: false,
       scale: 1,
@@ -283,13 +304,14 @@ let comboTimeout: number | null = null;
 
     // Draw debug wireframes
     if (debugMode) {
+      debugBodies.visible = true;
       debugBodies.clear();
       const thin = { width: 1, color: 0x333333 as const, alpha: 0.9 };
       debugBodies.setStrokeStyle(thin);
       const bodies = engine.world.bodies as Matter.Body[];
       for (const body of bodies) {
         // Choose color per type
-        let color = 0xffff00; // soft nodes by default
+        let color = 0x0080ff; // soft nodes by default (changed from yellow to blue)
         if (body.isStatic) color = 0x8b4513; // environment
         if (body === player.solid) color = 0x4a90e2; // player solid
         if (body === enemy.solid) color = 0xd0021b; // enemy solid
@@ -311,6 +333,24 @@ let comboTimeout: number | null = null;
         }
       }
       debugBodies.stroke();
+      player.mesh.alpha = 0.3; // Make textures semi-transparent to see debug shapes
+      enemy.mesh.alpha = 0.3;
+      if (player && typeof player.setDebugGridVisible === "function") {
+        player.setDebugGridVisible(true);
+      }
+      if (enemy && typeof enemy.setDebugGridVisible === "function") {
+        enemy.setDebugGridVisible(true);
+      }
+    } else {
+      debugBodies.visible = false;
+      player.mesh.alpha = 1.0; // Full opacity when not in debug mode
+      enemy.mesh.alpha = 1.0;
+      if (player && typeof player.setDebugGridVisible === "function") {
+        player.setDebugGridVisible(false);
+      }
+      if (enemy && typeof enemy.setDebugGridVisible === "function") {
+        enemy.setDebugGridVisible(false);
+      }
     }
   });
 

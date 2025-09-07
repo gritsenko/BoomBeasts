@@ -1,8 +1,8 @@
-import { Application, Assets, Graphics } from "pixi.js";
+import { Application, Assets, Graphics, Container } from "pixi.js";
 import Matter from "matter-js";
 import { SoftBodyCharacter } from "./SoftBodyCharacter";
 
-const debugMode = false;
+const debugMode = true;
 // Gameplay constants (ported from prototype)
 const MAX_ENERGY = 100;
 const ENERGY_REGEN = 25; // per second
@@ -127,6 +127,12 @@ let comboTimeout: number | null = null;
   );
   floorGraphics.endFill();
 
+  // Debug overlay (wireframes)
+  const debugContainer = new Container();
+  const debugBodies = new Graphics();
+  debugContainer.addChild(debugBodies);
+  app.stage.addChild(debugContainer);
+
   // Load textures
   const [duckTexture, kapibaraTexture] = await Promise.all([
     Assets.load("./assets/sprites/duck.png"),
@@ -148,7 +154,7 @@ let comboTimeout: number | null = null;
       damping: SOFT_CFG.damping,
       frictionAir: SOFT_CFG.frictionAir,
       restitution: SOFT_CFG.restitution,
-      debugGrid: debugMode,
+      debugGrid: true,
       scale: 1,
     },
     { category: 0x0001, mask: 0x0002 | 0x0004, group: -1 },
@@ -167,15 +173,14 @@ let comboTimeout: number | null = null;
       damping: SOFT_CFG.damping,
       frictionAir: SOFT_CFG.frictionAir,
       restitution: SOFT_CFG.restitution,
-      debugGrid: debugMode,
+      debugGrid: true,
       mirror: false,
       scale: 1,
     },
     { category: 0x0002, mask: 0x0001 | 0x0004, group: -2 },
   ); // collide with player+env, no self-collisions
 
-  // Collision-based push: when player and enemy particles collide, apply
-  // opposing forces along the contact direction to simulate a shove.
+  // Collision-based push between SOLID colliders only
   Events.on(
     engine,
     "collisionActive",
@@ -184,11 +189,10 @@ let comboTimeout: number | null = null;
       for (const pair of pairs) {
         const a = pair.bodyA as Matter.Body;
         const b = pair.bodyB as Matter.Body;
-        const aIsPlayer = player.ownsBody(a);
-        const bIsPlayer = player.ownsBody(b);
-        const aIsEnemy = enemy.ownsBody(a);
-        const bIsEnemy = enemy.ownsBody(b);
-        if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
+        const isSolidPair =
+          (a === player.solid && b === enemy.solid) ||
+          (a === enemy.solid && b === player.solid);
+        if (!isSolidPair) continue;
 
         // Direction from A to B
         const dir = {
@@ -204,30 +208,29 @@ let comboTimeout: number | null = null;
           x: b.velocity.x - a.velocity.x,
           y: b.velocity.y - a.velocity.y,
         };
-        const closingSpeed = relVel.x * dir.x + relVel.y * dir.y; // >0 means B moving away
-
-        // Overlap depth estimate (if available); otherwise 0
+        const closingSpeed = relVel.x * dir.x + relVel.y * dir.y; // >0 means separating
         const overlap = Math.max(0, -(pair.separation ?? 0));
 
-        // Stronger continuous push scaled by closing and overlap
-        const base = 0.3; // was 0.0006
+        const base = 0.002;
         const pushMag = Math.min(
-          0.12,
+          0.02,
           base +
-            (closingSpeed < 0 ? -closingSpeed * 0.004 : 0) +
-            overlap * 0.004,
+            (closingSpeed < 0 ? -closingSpeed * 0.002 : 0) +
+            overlap * 0.002,
         );
-
-        const pushA = { x: -dir.x * pushMag, y: -dir.y * pushMag };
-        const pushB = { x: dir.x * pushMag, y: dir.y * pushMag };
-
-        Body.applyForce(a, a.position, pushA);
-        Body.applyForce(b, b.position, pushB);
+        Body.applyForce(a, a.position, {
+          x: -dir.x * pushMag,
+          y: -dir.y * pushMag,
+        });
+        Body.applyForce(b, b.position, {
+          x: dir.x * pushMag,
+          y: dir.y * pushMag,
+        });
       }
     },
   );
 
-  // One-shot burst at contact begin to separate more decisively
+  // One-shot burst when SOLIDs start contact
   Events.on(
     engine,
     "collisionStart",
@@ -236,12 +239,10 @@ let comboTimeout: number | null = null;
       for (const pair of pairs) {
         const a = pair.bodyA as Matter.Body;
         const b = pair.bodyB as Matter.Body;
-        const aIsPlayer = player.ownsBody(a);
-        const bIsPlayer = player.ownsBody(b);
-        const aIsEnemy = enemy.ownsBody(a);
-        const bIsEnemy = enemy.ownsBody(b);
-        if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
-
+        const isSolidPair =
+          (a === player.solid && b === enemy.solid) ||
+          (a === enemy.solid && b === player.solid);
+        if (!isSolidPair) continue;
         const dir = {
           x: b.position.x - a.position.x,
           y: b.position.y - a.position.y,
@@ -249,9 +250,7 @@ let comboTimeout: number | null = null;
         const len = Math.hypot(dir.x, dir.y) || 1;
         dir.x /= len;
         dir.y /= len;
-
         const overlap = Math.max(0, -(pair.separation ?? 0));
-        // Velocity kick (delta-v), capped
         const kick = Math.min(1.2, 0.4 + overlap * 1.0);
         Body.setVelocity(a, {
           x: a.velocity.x - dir.x * kick,
@@ -280,6 +279,38 @@ let comboTimeout: number | null = null;
     if (!isRoundOver) {
       checkBounds(player);
       checkBounds(enemy);
+    }
+
+    // Draw debug wireframes
+    if (debugMode) {
+      debugBodies.clear();
+      const thin = { width: 1, color: 0x333333 as const, alpha: 0.9 };
+      debugBodies.setStrokeStyle(thin);
+      const bodies = engine.world.bodies as Matter.Body[];
+      for (const body of bodies) {
+        // Choose color per type
+        let color = 0xffff00; // soft nodes by default
+        if (body.isStatic) color = 0x8b4513; // environment
+        if (body === player.solid) color = 0x4a90e2; // player solid
+        if (body === enemy.solid) color = 0xd0021b; // enemy solid
+        const label = (body as unknown as { label?: string }).label;
+        if (label === "softDriver") color = 0x00ffff; // driver
+
+        debugBodies.setStrokeStyle({ width: 1, color, alpha: 0.9 });
+        const circleRadius = (body as unknown as { circleRadius?: number })
+          .circleRadius;
+        if (circleRadius && circleRadius > 0) {
+          debugBodies.circle(body.position.x, body.position.y, circleRadius);
+        } else if (body.vertices && body.vertices.length > 0) {
+          const vs = body.vertices;
+          debugBodies.moveTo(vs[0].x, vs[0].y);
+          for (let i = 1; i < vs.length; i++) {
+            debugBodies.lineTo(vs[i].x, vs[i].y);
+          }
+          debugBodies.closePath();
+        }
+      }
+      debugBodies.stroke();
     }
   });
 

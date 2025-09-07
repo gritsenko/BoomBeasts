@@ -23,6 +23,9 @@ export class SoftBodyCharacter {
   public bodies: Matter.Body[] = [];
   public bodySet: Set<number> = new Set();
   public constraints: Matter.Constraint[] = [];
+  // Solid gameplay collider and a static driver that tethers the soft grid
+  public solid: Matter.Body;
+  private driver: Matter.Body;
   public gridSizeX: number;
   public gridSizeY: number;
   public particleRadius: number;
@@ -33,6 +36,9 @@ export class SoftBodyCharacter {
   private gridGraphics: Graphics | null = null;
   private shockwaves: { g: Graphics; life: number; maxLife: number }[] = [];
   private blockTimer: number | null = null;
+  // Soft-layer collision category (visual-only collisions with floor/other soft)
+  private static readonly SOFT_CATEGORY = 0x0008;
+  private static readonly ENV_CATEGORY = 0x0004;
 
   constructor(
     app: Application,
@@ -79,7 +85,37 @@ export class SoftBodyCharacter {
       this.app.stage.addChild(this.gridGraphics);
     }
 
-    // Build physics grid
+    // Create solid gameplay collider (circle) — only this participates in gameplay
+    const centerX = this.mesh.x + this.mesh.width / 2;
+    const centerY = this.mesh.y + this.mesh.height / 2;
+    const solidRadius = Math.max(this.mesh.width, this.mesh.height) * 0.35;
+    this.solid = Matter.Bodies.circle(centerX, centerY, solidRadius, {
+      friction: 0.2,
+      frictionStatic: 0.5,
+      frictionAir: options.frictionAir ?? 0.02,
+      restitution: options.restitution ?? 0.05,
+      density: (options.initialDensity ?? 0.001) * 40, // heavier core
+      collisionFilter: {
+        group: 0,
+        category: collision.category,
+        mask: collision.mask,
+      },
+      label: "solid",
+    });
+    // Lock rotation to prevent constant spinning from soft tethers
+    Matter.Body.setInertia(this.solid, Infinity);
+    Matter.World.add(engine.world, this.solid);
+
+    // Driver body (static, no collisions) to which soft mesh is tethered
+    this.driver = Matter.Bodies.circle(centerX, centerY, 2, {
+      isStatic: true,
+      isSensor: true,
+      collisionFilter: { category: 0, mask: 0, group: 0 },
+      label: "softDriver",
+    });
+    Matter.World.add(engine.world, this.driver);
+
+    // Build physics grid (soft layer)
     const columnGap = this.mesh.width / (this.gridSizeX - 1);
     const rowGap = this.mesh.height / (this.gridSizeY - 1);
     const particleOptions: Matter.IBodyDefinition = {
@@ -89,10 +125,10 @@ export class SoftBodyCharacter {
       restitution: options.restitution ?? 0.1,
       density: this.initialDensity,
       collisionFilter: {
-        // Disable self-collision within a character via negative group
-        group: collision.group ?? -1,
-        category: collision.category,
-        mask: collision.mask,
+        // Soft layer collides only with other soft and environment, not solids
+        group: 0,
+        category: SoftBodyCharacter.SOFT_CATEGORY,
+        mask: SoftBodyCharacter.SOFT_CATEGORY | SoftBodyCharacter.ENV_CATEGORY,
       },
     } as Matter.IBodyDefinition;
     const stiffness = options.stiffness ?? 0.1;
@@ -114,7 +150,7 @@ export class SoftBodyCharacter {
         this.bodySet.add(body.id);
       }
     }
-    // Constraints
+    // Constraints among soft nodes
     for (let y = 0; y < this.gridSizeY; y++) {
       for (let x = 0; x < this.gridSizeX; x++) {
         const idx = y * this.gridSizeX + x;
@@ -184,6 +220,23 @@ export class SoftBodyCharacter {
       }
     }
 
+    // Tether only the center soft node to the driver to avoid torque
+    const centerIdx =
+      Math.floor(this.gridSizeY / 2) * this.gridSizeX +
+      Math.floor(this.gridSizeX / 2);
+    const tetherStiff = Math.min(1, (options.stiffness ?? 0.1) * 1.0);
+    const tetherDamp = options.damping ?? 0.3;
+    this.constraints.push(
+      Matter.Constraint.create({
+        bodyA: this.driver,
+        bodyB: this.bodies[centerIdx],
+        stiffness: tetherStiff,
+        damping: tetherDamp,
+        length: 0,
+        render: renderOpts,
+      }),
+    );
+
     Matter.World.add(engine.world, this.bodies);
     Matter.World.add(engine.world, this.constraints);
 
@@ -212,6 +265,10 @@ export class SoftBodyCharacter {
   }
 
   public update(): void {
+    // Keep driver in sync with the solid collider position
+    if (this.driver && this.solid) {
+      Matter.Body.setPosition(this.driver, this.solid.position);
+    }
     // Sync bodies to mesh vertices
     const vb = this.getVertexBuffer();
     if (!vb) return;
@@ -254,17 +311,11 @@ export class SoftBodyCharacter {
   }
 
   public getCenter(): { x: number; y: number } {
-    const midX = Math.floor(this.gridSizeX / 2);
-    const midY = Math.floor(this.gridSizeY / 2);
-    const b = this.bodies[midY * this.gridSizeX + midX];
-    return { x: b.position.x, y: b.position.y };
+    return { x: this.solid.position.x, y: this.solid.position.y };
   }
 
   public applyStomp(targetX: number, power: number): void {
-    const centerIdx =
-      Math.floor(this.gridSizeY / 2) * this.gridSizeX +
-      Math.floor(this.gridSizeX / 2);
-    const b = this.bodies[centerIdx];
+    const b = this.solid;
     const dir = Math.sign(targetX - b.position.x) || 1;
     const verticalForce = -0.04 * power;
     const horizontalForce = dir * 0.05 * power;
@@ -290,10 +341,11 @@ export class SoftBodyCharacter {
     this.shockwaves.push({ g, life: 0, maxLife: 18 }); // ~0.3s at 60fps
   }
 
-  public applyBlock(durationMs = 1000, factor = 10): void {
-    // Increase density temporarily
-    this.bodies.forEach((b) =>
-      Matter.Body.setDensity(b, (b.density || this.initialDensity) * factor),
+  public applyBlock(durationMs = 1000, factor = 3): void {
+    // Increase density of the solid collider temporarily (gameplay effect)
+    Matter.Body.setDensity(
+      this.solid,
+      (this.solid.density || this.initialDensity * 40) * factor,
     );
     if (this.blockTimer) window.clearTimeout(this.blockTimer);
     // Shield effect
@@ -306,15 +358,14 @@ export class SoftBodyCharacter {
     this.shockwaves.push({ g, life: 0, maxLife: 60 });
 
     this.blockTimer = window.setTimeout(() => {
-      this.bodies.forEach((b) =>
-        Matter.Body.setDensity(b, this.initialDensity),
-      );
+      // Restore solid density
+      Matter.Body.setDensity(this.solid, (this.initialDensity ?? 0.001) * 40);
       this.blockTimer = null;
     }, durationMs);
   }
 
   public reset(x: number, y: number): void {
-    // Reset positions to a grid anchored at (x,y)
+    // Reset positions to a grid anchored at (x,y) (top-left). Recenter solid/driver.
     const columnGap = this.mesh.width / (this.gridSizeX - 1);
     const rowGap = this.mesh.height / (this.gridSizeY - 1);
     for (let j = 0; j < this.gridSizeY; j++) {
@@ -330,6 +381,14 @@ export class SoftBodyCharacter {
         Matter.Body.setDensity(b, this.initialDensity);
       }
     }
+    const cx = x + this.mesh.width / 2;
+    const cy = y + this.mesh.height / 2;
+    Matter.Body.setPosition(this.driver, { x: cx, y: cy });
+    Matter.Body.setVelocity(this.driver, { x: 0, y: 0 });
+    Matter.Body.setPosition(this.solid, { x: cx, y: cy });
+    Matter.Body.setVelocity(this.solid, { x: 0, y: 0 });
+    Matter.Body.setAngle(this.solid, 0);
+    Matter.Body.setAngularVelocity(this.solid, 0);
     this.mesh.x = x;
     this.mesh.y = y;
     this.setVisible(true);
@@ -341,7 +400,8 @@ export class SoftBodyCharacter {
   }
 
   public ownsBody(b: Matter.Body): boolean {
-    return this.bodySet.has(b.id);
+    // For legacy checks that traverse soft nodes
+    return this.bodySet.has(b.id) || b === this.solid;
   }
 
   private tickEffects = () => {

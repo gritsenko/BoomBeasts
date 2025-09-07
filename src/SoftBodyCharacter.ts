@@ -1,5 +1,5 @@
-import { Application, Graphics, MeshPlane, Texture, Container } from "pixi.js";
-import Matter from "matter-js";
+import { Application, Graphics, MeshPlane, Texture, Container } from 'pixi.js';
+import Matter from 'matter-js';
 
 export type SoftBodyOptions = {
   x: number;
@@ -55,7 +55,7 @@ export class SoftBodyCharacter {
       category: 0x0001,
       mask: 0xffff,
       group: -1,
-    },
+    }
   ) {
     this.app = app;
     this.engine = engine;
@@ -85,7 +85,7 @@ export class SoftBodyCharacter {
 
     this.mesh.x = options.x;
     this.mesh.y = options.y;
-    
+
     // Add mesh to container or stage
     const targetContainer = this.container || this.app.stage;
     targetContainer.addChild(this.mesh);
@@ -101,7 +101,7 @@ export class SoftBodyCharacter {
     // Create solid gameplay collider (circle) — only this participates in gameplay
     const centerX = this.mesh.x + this.mesh.width / 2;
     // Bottom-align the solid with the soft mesh to avoid squashing from center alignment
-    this.solidRadius = Math.max(this.mesh.width, this.mesh.height) * 0.40;
+    this.solidRadius = Math.max(this.mesh.width, this.mesh.height) * 0.4;
     const centerY = this.mesh.y + this.mesh.height - this.solidRadius;
     this.solid = Matter.Bodies.circle(centerX, centerY, this.solidRadius, {
       friction: 0.2,
@@ -114,7 +114,7 @@ export class SoftBodyCharacter {
         category: collision.category,
         mask: collision.mask,
       },
-      label: "solid",
+      label: 'solid',
     });
     // Lock rotation to prevent constant spinning from soft tethers
     Matter.Body.setInertia(this.solid, Infinity);
@@ -125,7 +125,7 @@ export class SoftBodyCharacter {
       isStatic: true,
       isSensor: true,
       collisionFilter: { category: 0, mask: 0, group: 0 },
-      label: "softDriver",
+      label: 'softDriver',
     });
     Matter.World.add(engine.world, this.driver);
 
@@ -156,7 +156,7 @@ export class SoftBodyCharacter {
           this.mesh.x + x * columnGap,
           this.mesh.y + y * rowGap,
           this.particleRadius,
-          particleOptions,
+          particleOptions
         );
         // Reduce allowed overlap between particles during collision resolution
         (body as Matter.Body).slop = 0.01;
@@ -178,7 +178,7 @@ export class SoftBodyCharacter {
               stiffness,
               damping,
               render: renderOpts,
-            }),
+            })
           );
         }
         if (y < this.gridSizeY - 1) {
@@ -190,7 +190,7 @@ export class SoftBodyCharacter {
               stiffness,
               damping,
               render: renderOpts,
-            }),
+            })
           );
         }
         // Cross braces
@@ -203,7 +203,7 @@ export class SoftBodyCharacter {
               stiffness: stiffness * 0.3,
               damping,
               render: renderOpts,
-            }),
+            })
           );
         }
         // Bending constraints (skip one)
@@ -216,7 +216,7 @@ export class SoftBodyCharacter {
               stiffness: stiffness * 0.2,
               damping: damping * 0.5,
               render: renderOpts,
-            }),
+            })
           );
         }
         if (y < this.gridSizeY - 2) {
@@ -228,7 +228,7 @@ export class SoftBodyCharacter {
               stiffness: stiffness * 0.2,
               damping: damping * 0.5,
               render: renderOpts,
-            }),
+            })
           );
         }
       }
@@ -248,7 +248,7 @@ export class SoftBodyCharacter {
         damping: tetherDamp,
         length: 0,
         render: renderOpts,
-      }),
+      })
     );
 
     Matter.World.add(engine.world, this.bodies);
@@ -267,7 +267,7 @@ export class SoftBodyCharacter {
     const geom = this.mesh.geometry as unknown as GeometryLike;
     const posBuffer =
       (geom.getBuffer &&
-        (geom.getBuffer("aPosition") || geom.getBuffer("aVertexPosition"))) ||
+        (geom.getBuffer('aPosition') || geom.getBuffer('aVertexPosition'))) ||
       undefined;
     if (posBuffer && posBuffer.data) {
       return { data: posBuffer.data, flush: () => posBuffer.update() };
@@ -360,7 +360,7 @@ export class SoftBodyCharacter {
     // Increase density of the solid collider temporarily (gameplay effect)
     Matter.Body.setDensity(
       this.solid,
-      (this.solid.density || this.initialDensity * 40) * factor,
+      (this.solid.density || this.initialDensity * 40) * factor
     );
     if (this.blockTimer) window.clearTimeout(this.blockTimer);
     // Shield effect

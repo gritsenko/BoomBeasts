@@ -7,7 +7,8 @@
     "start": "npm run dev",
     "build": "npm run lint && tsc && vite build",
     "lint": "eslint .",
-    "dev": "vite"
+    "dev": "vite",
+    "format": "prettier --write \"src/**/*.{ts,js,tsx,jsx}\""
   },
   "dependencies": {
     "matter-js": "^0.20.0",

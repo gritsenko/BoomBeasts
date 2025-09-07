@@ -1,4 +1,4 @@
-import { Application, Graphics, MeshPlane, Texture } from "pixi.js";
+import { Application, Graphics, MeshPlane, Texture, Container } from "pixi.js";
 import Matter from "matter-js";
 
 export type SoftBodyOptions = {
@@ -16,6 +16,9 @@ export type SoftBodyOptions = {
   debugGrid?: boolean;
   mirror?: boolean;
   scale?: number; // uniform
+  stompVerticalForce?: number;
+  stompHorizontalForce?: number;
+  container?: Container; // Add container option
 };
 
 export class SoftBodyCharacter {
@@ -23,16 +26,26 @@ export class SoftBodyCharacter {
   public bodies: Matter.Body[] = [];
   public bodySet: Set<number> = new Set();
   public constraints: Matter.Constraint[] = [];
+  // Solid gameplay collider and a static driver that tethers the soft grid
+  public solid: Matter.Body;
+  private driver: Matter.Body;
+  private solidRadius: number;
   public gridSizeX: number;
   public gridSizeY: number;
   public particleRadius: number;
   public initialDensity: number;
+  public stompVerticalForce: number;
+  public stompHorizontalForce: number;
   public app: Application;
   public engine: Matter.Engine;
   private debug: boolean;
   private gridGraphics: Graphics | null = null;
   private shockwaves: { g: Graphics; life: number; maxLife: number }[] = [];
   private blockTimer: number | null = null;
+  private container: Container | null = null;
+  // Soft-layer collision category (visual-only collisions with floor/other soft)
+  private static readonly SOFT_CATEGORY = 0x0008;
+  private static readonly ENV_CATEGORY = 0x0004;
 
   constructor(
     app: Application,
@@ -50,7 +63,10 @@ export class SoftBodyCharacter {
     this.gridSizeY = options.gridSizeY;
     this.particleRadius = options.particleRadius ?? 5;
     this.initialDensity = options.initialDensity ?? 0.001;
+    this.stompVerticalForce = options.stompVerticalForce ?? -0.24;
+    this.stompHorizontalForce = options.stompHorizontalForce ?? 0.24;
     this.debug = !!options.debugGrid;
+    this.container = options.container || null;
 
     // Create mesh plane
     this.mesh = new MeshPlane({
@@ -69,17 +85,51 @@ export class SoftBodyCharacter {
 
     this.mesh.x = options.x;
     this.mesh.y = options.y;
-    this.app.stage.addChild(this.mesh);
+    
+    // Add mesh to container or stage
+    const targetContainer = this.container || this.app.stage;
+    targetContainer.addChild(this.mesh);
 
     if (this.debug) {
       this.gridGraphics = new Graphics();
       this.gridGraphics.setStrokeStyle({ width: 1, color: 0xff00ff, alpha: 1 });
       this.gridGraphics.x = this.mesh.x;
       this.gridGraphics.y = this.mesh.y;
-      this.app.stage.addChild(this.gridGraphics);
+      targetContainer.addChild(this.gridGraphics);
     }
 
-    // Build physics grid
+    // Create solid gameplay collider (circle) — only this participates in gameplay
+    const centerX = this.mesh.x + this.mesh.width / 2;
+    // Bottom-align the solid with the soft mesh to avoid squashing from center alignment
+    this.solidRadius = Math.max(this.mesh.width, this.mesh.height) * 0.40;
+    const centerY = this.mesh.y + this.mesh.height - this.solidRadius;
+    this.solid = Matter.Bodies.circle(centerX, centerY, this.solidRadius, {
+      friction: 0.2,
+      frictionStatic: 0.5,
+      frictionAir: options.frictionAir ?? 0.02,
+      restitution: options.restitution ?? 0.05,
+      density: (options.initialDensity ?? 0.001) * 40, // heavier core
+      collisionFilter: {
+        group: 0,
+        category: collision.category,
+        mask: collision.mask,
+      },
+      label: "solid",
+    });
+    // Lock rotation to prevent constant spinning from soft tethers
+    Matter.Body.setInertia(this.solid, Infinity);
+    Matter.World.add(engine.world, this.solid);
+
+    // Driver body (static, no collisions) to which soft mesh is tethered
+    this.driver = Matter.Bodies.circle(centerX, centerY, 2, {
+      isStatic: true,
+      isSensor: true,
+      collisionFilter: { category: 0, mask: 0, group: 0 },
+      label: "softDriver",
+    });
+    Matter.World.add(engine.world, this.driver);
+
+    // Build physics grid (soft layer)
     const columnGap = this.mesh.width / (this.gridSizeX - 1);
     const rowGap = this.mesh.height / (this.gridSizeY - 1);
     const particleOptions: Matter.IBodyDefinition = {
@@ -89,10 +139,10 @@ export class SoftBodyCharacter {
       restitution: options.restitution ?? 0.1,
       density: this.initialDensity,
       collisionFilter: {
-        // Disable self-collision within a character via negative group
-        group: collision.group ?? -1,
-        category: collision.category,
-        mask: collision.mask,
+        // Soft layer collides only with other soft and environment, not solids
+        group: 0,
+        category: SoftBodyCharacter.SOFT_CATEGORY,
+        mask: SoftBodyCharacter.SOFT_CATEGORY | SoftBodyCharacter.ENV_CATEGORY,
       },
     } as Matter.IBodyDefinition;
     const stiffness = options.stiffness ?? 0.1;
@@ -114,7 +164,7 @@ export class SoftBodyCharacter {
         this.bodySet.add(body.id);
       }
     }
-    // Constraints
+    // Constraints among soft nodes
     for (let y = 0; y < this.gridSizeY; y++) {
       for (let x = 0; x < this.gridSizeX; x++) {
         const idx = y * this.gridSizeX + x;
@@ -184,6 +234,23 @@ export class SoftBodyCharacter {
       }
     }
 
+    // Tether only the center soft node to the driver to avoid torque
+    const centerIdx =
+      Math.floor(this.gridSizeY / 2) * this.gridSizeX +
+      Math.floor(this.gridSizeX / 2);
+    const tetherStiff = Math.min(1, (options.stiffness ?? 0.1) * 1.0);
+    const tetherDamp = options.damping ?? 0.3;
+    this.constraints.push(
+      Matter.Constraint.create({
+        bodyA: this.driver,
+        bodyB: this.bodies[centerIdx],
+        stiffness: tetherStiff,
+        damping: tetherDamp,
+        length: 0,
+        render: renderOpts,
+      }),
+    );
+
     Matter.World.add(engine.world, this.bodies);
     Matter.World.add(engine.world, this.constraints);
 
@@ -212,6 +279,10 @@ export class SoftBodyCharacter {
   }
 
   public update(): void {
+    // Keep driver in sync with the solid collider position
+    if (this.driver && this.solid) {
+      Matter.Body.setPosition(this.driver, this.solid.position);
+    }
     // Sync bodies to mesh vertices
     const vb = this.getVertexBuffer();
     if (!vb) return;
@@ -254,20 +325,14 @@ export class SoftBodyCharacter {
   }
 
   public getCenter(): { x: number; y: number } {
-    const midX = Math.floor(this.gridSizeX / 2);
-    const midY = Math.floor(this.gridSizeY / 2);
-    const b = this.bodies[midY * this.gridSizeX + midX];
-    return { x: b.position.x, y: b.position.y };
+    return { x: this.solid.position.x, y: this.solid.position.y };
   }
 
   public applyStomp(targetX: number, power: number): void {
-    const centerIdx =
-      Math.floor(this.gridSizeY / 2) * this.gridSizeX +
-      Math.floor(this.gridSizeX / 2);
-    const b = this.bodies[centerIdx];
+    const b = this.solid;
     const dir = Math.sign(targetX - b.position.x) || 1;
-    const verticalForce = -0.04 * power;
-    const horizontalForce = dir * 0.05 * power;
+    const verticalForce = this.stompVerticalForce * power;
+    const horizontalForce = dir * this.stompHorizontalForce * power;
     Matter.Body.applyForce(b, b.position, {
       x: horizontalForce,
       y: verticalForce,
@@ -285,15 +350,17 @@ export class SoftBodyCharacter {
     g.rect(-size / 2, -size / 2, size, size);
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
-    this.app.stage.addChild(g);
+    const targetContainer = this.container || this.app.stage;
+    targetContainer.addChild(g);
     // Draw stroke once per frame via stroke() call in tick
     this.shockwaves.push({ g, life: 0, maxLife: 18 }); // ~0.3s at 60fps
   }
 
-  public applyBlock(durationMs = 1000, factor = 10): void {
-    // Increase density temporarily
-    this.bodies.forEach((b) =>
-      Matter.Body.setDensity(b, (b.density || this.initialDensity) * factor),
+  public applyBlock(durationMs = 1000, factor = 3): void {
+    // Increase density of the solid collider temporarily (gameplay effect)
+    Matter.Body.setDensity(
+      this.solid,
+      (this.solid.density || this.initialDensity * 40) * factor,
     );
     if (this.blockTimer) window.clearTimeout(this.blockTimer);
     // Shield effect
@@ -302,19 +369,19 @@ export class SoftBodyCharacter {
     g.rect(-50, -50, 100, 100);
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
-    this.app.stage.addChild(g);
+    const targetContainer = this.container || this.app.stage;
+    targetContainer.addChild(g);
     this.shockwaves.push({ g, life: 0, maxLife: 60 });
 
     this.blockTimer = window.setTimeout(() => {
-      this.bodies.forEach((b) =>
-        Matter.Body.setDensity(b, this.initialDensity),
-      );
+      // Restore solid density
+      Matter.Body.setDensity(this.solid, (this.initialDensity ?? 0.001) * 40);
       this.blockTimer = null;
     }, durationMs);
   }
 
   public reset(x: number, y: number): void {
-    // Reset positions to a grid anchored at (x,y)
+    // Reset positions to a grid anchored at (x,y) (top-left). Recenter solid/driver.
     const columnGap = this.mesh.width / (this.gridSizeX - 1);
     const rowGap = this.mesh.height / (this.gridSizeY - 1);
     for (let j = 0; j < this.gridSizeY; j++) {
@@ -330,6 +397,15 @@ export class SoftBodyCharacter {
         Matter.Body.setDensity(b, this.initialDensity);
       }
     }
+    const cx = x + this.mesh.width / 2;
+    // Keep solid bottom edge aligned with soft mesh bottom edge
+    const cy = y + this.mesh.height - this.solidRadius;
+    Matter.Body.setPosition(this.driver, { x: cx, y: cy });
+    Matter.Body.setVelocity(this.driver, { x: 0, y: 0 });
+    Matter.Body.setPosition(this.solid, { x: cx, y: cy });
+    Matter.Body.setVelocity(this.solid, { x: 0, y: 0 });
+    Matter.Body.setAngle(this.solid, 0);
+    Matter.Body.setAngularVelocity(this.solid, 0);
     this.mesh.x = x;
     this.mesh.y = y;
     this.setVisible(true);
@@ -340,8 +416,16 @@ export class SoftBodyCharacter {
     if (this.gridGraphics) this.gridGraphics.visible = v && this.debug;
   }
 
+  /**
+   * Show/hide debug grid overlay (purple grid) based on global debug mode.
+   */
+  public setDebugGridVisible(v: boolean): void {
+    if (this.gridGraphics) this.gridGraphics.visible = v;
+  }
+
   public ownsBody(b: Matter.Body): boolean {
-    return this.bodySet.has(b.id);
+    // For legacy checks that traverse soft nodes
+    return this.bodySet.has(b.id) || b === this.solid;
   }
 
   private tickEffects = () => {

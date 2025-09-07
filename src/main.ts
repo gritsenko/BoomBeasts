@@ -1,8 +1,49 @@
-import { Application, Assets, Graphics } from "pixi.js";
+import { Application, Assets, Graphics, Container } from "pixi.js";
 import Matter from "matter-js";
 import { SoftBodyCharacter } from "./SoftBodyCharacter";
 
-const debugMode = false;
+// Prevent right-click context menu
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Safe area configuration
+const SAFE_AREA_SIZE = 700; // 700x700 pixels safe area
+let currentScale = 1;
+let safeAreaOffsetX = 0;
+let safeAreaOffsetY = 0;
+
+// Game container for camera-like scaling
+let gameContainer: Container | null = null;
+
+// Function to handle window resize and scale the viewport
+function handleResize(app: Application) {
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+
+  // Calculate scale to fit the safe area into the window
+  const scaleX = windowWidth / SAFE_AREA_SIZE;
+  const scaleY = windowHeight / SAFE_AREA_SIZE;
+  currentScale = Math.min(scaleX, scaleY);
+
+  // Center the safe area
+  safeAreaOffsetX = (windowWidth - SAFE_AREA_SIZE * currentScale) / 2;
+  safeAreaOffsetY = (windowHeight - SAFE_AREA_SIZE * currentScale) / 2;
+
+  // Apply scale to the game container (camera-like scaling)
+  if (gameContainer) {
+    gameContainer.scale.set(currentScale);
+  // Position the game container so the safe-area pivot is centered in the viewport
+  gameContainer.position.set(windowWidth / 2, windowHeight / 2);
+  }
+
+  // Update canvas size to match window
+  app.canvas.style.width = `${windowWidth}px`;
+  app.canvas.style.height = `${windowHeight}px`;
+
+  console.log(`Resize: ${windowWidth}x${windowHeight}, Scale: ${currentScale.toFixed(2)}, Offset: ${safeAreaOffsetX.toFixed(0)}, ${safeAreaOffsetY.toFixed(0)}`);
+}
+
+let debugMode = false; // Debug view disabled by default
+
 // Gameplay constants (ported from prototype)
 const MAX_ENERGY = 100;
 const ENERGY_REGEN = 25; // per second
@@ -17,10 +58,13 @@ const SOFT_CFG = {
   damping: 0.1,
   particleRadius: 7,
   gravity: 1.0,
-  frictionAir: 0.1,
+  frictionAir: 0.05,
   restitution: 0.2,
-  gridSizeX: 6,
-  gridSizeY: 7,
+  gridSizeX: 7,
+  gridSizeY: 8,
+  // Stomp force configuration (applied to solid body)
+  stompVerticalForce: -15, // Base vertical force (will be multiplied by power)
+  stompHorizontalForce: 20, // Base horizontal force (will be multiplied by power and direction)
 };
 
 // UI refs
@@ -64,6 +108,19 @@ let comboTimeout: number | null = null;
   await app.init({ background: "whitesmoke", resizeTo: window });
   document.getElementById("pixi-container")!.appendChild(app.canvas);
 
+  // Add window resize listener
+  window.addEventListener('resize', () => handleResize(app));
+
+    // Setup debug hotkey after player/enemy are created
+  window.addEventListener("keydown", (e) => {
+    // Toggle debug view with D
+    if (e.key === "d") {
+      debugMode = !debugMode;
+      player.setDebugGridVisible(debugMode);
+      enemy.setDebugGridVisible(debugMode);
+    }
+  });
+
   // Matter world
   const { Engine, World, Bodies, Events, Body } = Matter;
   const engine = Engine.create();
@@ -73,11 +130,11 @@ let comboTimeout: number | null = null;
   engine.velocityIterations = 8; // default 4
   engine.constraintIterations = 4; // default 2
 
-  // Platform & bounds
-  const platformWidth = 900;
+  // Platform & bounds - back to original positioning
+  const platformWidth = 500;
   const platformHeight = 40;
-  const platformX = 500;
-  const platformY = 500;
+  const platformX = 350;
+  const platformY = 450;
   const ground = Bodies.rectangle(
     platformX,
     platformY,
@@ -116,8 +173,16 @@ let comboTimeout: number | null = null;
 
   World.add(engine.world, [ground, leftWall, rightWall, ceiling]);
 
+  // Create game container for camera-like scaling
+  gameContainer = new Container();
+  // Set pivot to center of the safe area so scaling centers correctly
+  gameContainer.pivot.set(SAFE_AREA_SIZE / 2, SAFE_AREA_SIZE / 2);
+  // Position gameContainer initially at center of canvas
+  gameContainer.position.set(window.innerWidth / 2, window.innerHeight / 2);
+  app.stage.addChild(gameContainer);
+
   // Visualize the floor/platform
-  const floorGraphics = app.stage.addChild(new Graphics());
+  const floorGraphics = gameContainer.addChild(new Graphics());
   floorGraphics.beginFill(0x8b4513, 0.8); // brown
   floorGraphics.drawRect(
     platformX - platformWidth / 2,
@@ -127,13 +192,33 @@ let comboTimeout: number | null = null;
   );
   floorGraphics.endFill();
 
+  // Debug overlay (wireframes)
+  const debugContainer = new Container();
+  debugContainer.visible = false; // Initially hidden
+  // Ensure debug overlay aligns with gameContainer origin
+  debugContainer.position.set(0, 0);
+  const debugBodies = new Graphics();
+  debugBodies.position.set(0, 0);
+  debugContainer.addChild(debugBodies);
+  
+  // Safe frame visualization
+  const safeFrameGraphics = new Graphics();
+  safeFrameGraphics.setStrokeStyle({ width: 3, color: 0xff0000, alpha: 0.8 }); // Red border
+  // Draw safe frame centered around pivot (pivot is at SAFE_AREA center)
+  safeFrameGraphics.position.set(0, 0);
+  safeFrameGraphics.rect(-SAFE_AREA_SIZE / 2, -SAFE_AREA_SIZE / 2, SAFE_AREA_SIZE, SAFE_AREA_SIZE);
+  safeFrameGraphics.stroke();
+  debugContainer.addChild(safeFrameGraphics);
+  
+  gameContainer.addChild(debugContainer);
+
   // Load textures
   const [duckTexture, kapibaraTexture] = await Promise.all([
     Assets.load("./assets/sprites/duck.png"),
     Assets.load("./assets/sprites/kapibara.png"),
   ]);
 
-  // Create characters
+  // Create characters - back to original positioning
   const player = new SoftBodyCharacter(
     app,
     engine,
@@ -148,8 +233,11 @@ let comboTimeout: number | null = null;
       damping: SOFT_CFG.damping,
       frictionAir: SOFT_CFG.frictionAir,
       restitution: SOFT_CFG.restitution,
-      debugGrid: debugMode,
+      stompVerticalForce: SOFT_CFG.stompVerticalForce,
+      stompHorizontalForce: SOFT_CFG.stompHorizontalForce,
+      debugGrid: true,
       scale: 1,
+      container: gameContainer || undefined,
     },
     { category: 0x0001, mask: 0x0002 | 0x0004, group: -1 },
   ); // collide with enemy+env, no self-collisions
@@ -167,15 +255,22 @@ let comboTimeout: number | null = null;
       damping: SOFT_CFG.damping,
       frictionAir: SOFT_CFG.frictionAir,
       restitution: SOFT_CFG.restitution,
-      debugGrid: debugMode,
+      stompVerticalForce: SOFT_CFG.stompVerticalForce,
+      stompHorizontalForce: SOFT_CFG.stompHorizontalForce,
+      debugGrid: true,
       mirror: false,
       scale: 1,
+      container: gameContainer || undefined,
     },
     { category: 0x0002, mask: 0x0001 | 0x0004, group: -2 },
   ); // collide with player+env, no self-collisions
 
-  // Collision-based push: when player and enemy particles collide, apply
-  // opposing forces along the contact direction to simulate a shove.
+  // Apply initial scaling after everything is set up
+  handleResize(app);
+
+  // No need to manually move graphics - they're now added to gameContainer directly
+
+  // Collision-based push between SOLID colliders only
   Events.on(
     engine,
     "collisionActive",
@@ -184,11 +279,10 @@ let comboTimeout: number | null = null;
       for (const pair of pairs) {
         const a = pair.bodyA as Matter.Body;
         const b = pair.bodyB as Matter.Body;
-        const aIsPlayer = player.ownsBody(a);
-        const bIsPlayer = player.ownsBody(b);
-        const aIsEnemy = enemy.ownsBody(a);
-        const bIsEnemy = enemy.ownsBody(b);
-        if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
+        const isSolidPair =
+          (a === player.solid && b === enemy.solid) ||
+          (a === enemy.solid && b === player.solid);
+        if (!isSolidPair) continue;
 
         // Direction from A to B
         const dir = {
@@ -204,30 +298,29 @@ let comboTimeout: number | null = null;
           x: b.velocity.x - a.velocity.x,
           y: b.velocity.y - a.velocity.y,
         };
-        const closingSpeed = relVel.x * dir.x + relVel.y * dir.y; // >0 means B moving away
-
-        // Overlap depth estimate (if available); otherwise 0
+        const closingSpeed = relVel.x * dir.x + relVel.y * dir.y; // >0 means separating
         const overlap = Math.max(0, -(pair.separation ?? 0));
 
-        // Stronger continuous push scaled by closing and overlap
-        const base = 0.3; // was 0.0006
+        const base = 0.002;
         const pushMag = Math.min(
-          0.12,
+          0.02,
           base +
-            (closingSpeed < 0 ? -closingSpeed * 0.004 : 0) +
-            overlap * 0.004,
+            (closingSpeed < 0 ? -closingSpeed * 0.002 : 0) +
+            overlap * 0.002,
         );
-
-        const pushA = { x: -dir.x * pushMag, y: -dir.y * pushMag };
-        const pushB = { x: dir.x * pushMag, y: dir.y * pushMag };
-
-        Body.applyForce(a, a.position, pushA);
-        Body.applyForce(b, b.position, pushB);
+        Body.applyForce(a, a.position, {
+          x: -dir.x * pushMag,
+          y: -dir.y * pushMag,
+        });
+        Body.applyForce(b, b.position, {
+          x: dir.x * pushMag,
+          y: dir.y * pushMag,
+        });
       }
     },
   );
 
-  // One-shot burst at contact begin to separate more decisively
+  // One-shot burst when SOLIDs start contact
   Events.on(
     engine,
     "collisionStart",
@@ -236,12 +329,10 @@ let comboTimeout: number | null = null;
       for (const pair of pairs) {
         const a = pair.bodyA as Matter.Body;
         const b = pair.bodyB as Matter.Body;
-        const aIsPlayer = player.ownsBody(a);
-        const bIsPlayer = player.ownsBody(b);
-        const aIsEnemy = enemy.ownsBody(a);
-        const bIsEnemy = enemy.ownsBody(b);
-        if (!((aIsPlayer && bIsEnemy) || (aIsEnemy && bIsPlayer))) continue;
-
+        const isSolidPair =
+          (a === player.solid && b === enemy.solid) ||
+          (a === enemy.solid && b === player.solid);
+        if (!isSolidPair) continue;
         const dir = {
           x: b.position.x - a.position.x,
           y: b.position.y - a.position.y,
@@ -249,9 +340,7 @@ let comboTimeout: number | null = null;
         const len = Math.hypot(dir.x, dir.y) || 1;
         dir.x /= len;
         dir.y /= len;
-
         const overlap = Math.max(0, -(pair.separation ?? 0));
-        // Velocity kick (delta-v), capped
         const kick = Math.min(1.2, 0.4 + overlap * 1.0);
         Body.setVelocity(a, {
           x: a.velocity.x - dir.x * kick,
@@ -280,6 +369,57 @@ let comboTimeout: number | null = null;
     if (!isRoundOver) {
       checkBounds(player);
       checkBounds(enemy);
+    }
+
+    // Draw debug wireframes
+    if (debugMode) {
+      debugContainer.visible = true;
+      debugBodies.clear();
+      const thin = { width: 1, color: 0x333333 as const, alpha: 0.9 };
+      debugBodies.setStrokeStyle(thin);
+      const bodies = engine.world.bodies as Matter.Body[];
+      for (const body of bodies) {
+        // Choose color per type
+        let color = 0x0080ff; // soft nodes by default (changed from yellow to blue)
+        if (body.isStatic) color = 0x8b4513; // environment
+        if (body === player.solid) color = 0x4a90e2; // player solid
+        if (body === enemy.solid) color = 0xd0021b; // enemy solid
+        const label = (body as unknown as { label?: string }).label;
+        if (label === "softDriver") color = 0x00ffff; // driver
+
+        debugBodies.setStrokeStyle({ width: 1, color, alpha: 0.9 });
+        const circleRadius = (body as unknown as { circleRadius?: number })
+          .circleRadius;
+        if (circleRadius && circleRadius > 0) {
+          debugBodies.circle(body.position.x, body.position.y, circleRadius);
+        } else if (body.vertices && body.vertices.length > 0) {
+          const vs = body.vertices;
+          debugBodies.moveTo(vs[0].x, vs[0].y);
+          for (let i = 1; i < vs.length; i++) {
+            debugBodies.lineTo(vs[i].x, vs[i].y);
+          }
+          debugBodies.closePath();
+        }
+      }
+      debugBodies.stroke();
+      player.mesh.alpha = 0.3; // Make textures semi-transparent to see debug shapes
+      enemy.mesh.alpha = 0.3;
+      if (player && typeof player.setDebugGridVisible === "function") {
+        player.setDebugGridVisible(true);
+      }
+      if (enemy && typeof enemy.setDebugGridVisible === "function") {
+        enemy.setDebugGridVisible(true);
+      }
+    } else {
+      debugContainer.visible = false;
+      player.mesh.alpha = 1.0; // Full opacity when not in debug mode
+      enemy.mesh.alpha = 1.0;
+      if (player && typeof player.setDebugGridVisible === "function") {
+        player.setDebugGridVisible(false);
+      }
+      if (enemy && typeof enemy.setDebugGridVisible === "function") {
+        enemy.setDebugGridVisible(false);
+      }
     }
   });
 

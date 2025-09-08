@@ -1,0 +1,66 @@
+{
+	"name": "duck",
+	"plugin-id": "Sprite",
+	"sid": 465727475253796,
+	"isGlobal": false,
+	"editorNewInstanceIsReplica": true,
+	"instanceVariables": [],
+	"behaviorTypes": [],
+	"effectTypes": [],
+	"animations": {
+		"items": [
+			{
+				"frames": [
+					{
+						"width": 212,
+						"height": 267,
+						"originX": 0.5,
+						"originY": 0.5,
+						"originalSource": "",
+						"exportFormat": "lossless",
+						"exportQuality": 0.8,
+						"fileType": "image/png",
+						"imageSpriteId": 7310872,
+						"collisionPoly": {
+							"points": [
+								0.5094339622641504,
+								0.07490636704119853,
+								0.6871070142062202,
+								0.07802744661824092,
+								0.8679245283018868,
+								0.23220973782771537,
+								0.9198113207547169,
+								0.5730337078651685,
+								0.8820754716981132,
+								0.7116104868913857,
+								0.7971698113207547,
+								0.9138576779026217,
+								0.7893080801334023,
+								0.9762797266356509,
+								0.2688679245283019,
+								0.9775280898876404,
+								0.2169811320754717,
+								0.9550561797752809,
+								0.018867924528301886,
+								0.5880149812734082,
+								0.0330188679245283,
+								0.5093632958801498
+							]
+						},
+						"useCollisionPoly": true,
+						"duration": 1,
+						"tag": ""
+					}
+				],
+				"sid": 503634992598005,
+				"name": "Default",
+				"isLooping": false,
+				"isPingPong": false,
+				"repeatCount": 1,
+				"repeatTo": 0,
+				"speed": 5
+			}
+		],
+		"subfolders": []
+	}
+}

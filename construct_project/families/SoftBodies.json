@@ -1,0 +1,12 @@
+{
+	"name": "SoftBodies",
+	"plugin-id": "Sprite",
+	"sid": 136305169746202,
+	"instanceVariables": [],
+	"behaviorTypes": [],
+	"effectTypes": [],
+	"members": [
+		"duck",
+		"kapibara"
+	]
+}

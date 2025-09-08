@@ -362,7 +362,11 @@ export class SoftBodyCharacter {
     if (this.blockTimer) window.clearTimeout(this.blockTimer);
     // Shield effect
     const g = new Graphics();
-    g.rect(-50, -50, 100, 100).stroke({ width: 4, color: 0xffffff, alpha: 0.6 });
+    g.rect(-50, -50, 100, 100).stroke({
+      width: 4,
+      color: 0xffffff,
+      alpha: 0.6,
+    });
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
     const targetContainer = this.container || this.app.stage;

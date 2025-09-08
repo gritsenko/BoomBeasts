@@ -171,14 +171,12 @@ let comboTimeout: number | null = null;
 
   // Visualize the floor/platform
   const floorGraphics = gameContainer.addChild(new Graphics());
-  floorGraphics.beginFill(0x8b4513, 0.8); // brown
-  floorGraphics.drawRect(
+  floorGraphics.rect(
     platformX - platformWidth / 2,
     platformY - platformHeight / 2,
     platformWidth,
     platformHeight
-  );
-  floorGraphics.endFill();
+  ).fill(0x8b4513, 0.8); // brown
 
   // Debug overlay (wireframes)
   const debugContainer = new Container();
@@ -191,7 +189,6 @@ let comboTimeout: number | null = null;
 
   // Safe frame visualization
   const safeFrameGraphics = new Graphics();
-  safeFrameGraphics.setStrokeStyle({ width: 3, color: 0xff0000, alpha: 0.8 }); // Red border
   // Draw safe frame centered around pivot (pivot is at SAFE_AREA center)
   safeFrameGraphics.position.set(0, 0);
   safeFrameGraphics.rect(
@@ -199,8 +196,7 @@ let comboTimeout: number | null = null;
     -SAFE_AREA_SIZE / 2,
     SAFE_AREA_SIZE,
     SAFE_AREA_SIZE
-  );
-  safeFrameGraphics.stroke();
+  ).stroke({ width: 3, color: 0xff0000, alpha: 0.8 }); // Red border
   debugContainer.addChild(safeFrameGraphics);
 
   gameContainer.addChild(debugContainer);

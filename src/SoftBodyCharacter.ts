@@ -92,7 +92,6 @@ export class SoftBodyCharacter {
 
     if (this.debug) {
       this.gridGraphics = new Graphics();
-      this.gridGraphics.setStrokeStyle({ width: 1, color: 0xff00ff, alpha: 1 });
       this.gridGraphics.x = this.mesh.x;
       this.gridGraphics.y = this.mesh.y;
       targetContainer.addChild(this.gridGraphics);
@@ -299,7 +298,6 @@ export class SoftBodyCharacter {
     if (this.debug && this.gridGraphics) {
       const g = this.gridGraphics;
       g.clear();
-      g.setStrokeStyle({ width: 1, color: 0xff00ff, alpha: 1 });
       const cols = this.gridSizeX;
       const rows = this.gridSizeY;
       for (let r = 0; r < rows; r++) {
@@ -318,7 +316,7 @@ export class SoftBodyCharacter {
           g.lineTo(data[i1], data[i1 + 1]);
         }
       }
-      g.stroke();
+      g.stroke({ width: 1, color: 0xff00ff, alpha: 1 });
       g.x = this.mesh.x;
       g.y = this.mesh.y;
     }
@@ -340,19 +338,18 @@ export class SoftBodyCharacter {
 
     // Shockwave effect
     const g = new Graphics();
-    g.setStrokeStyle({
+    // Using a rectangle ring for compatibility
+    const size = power * 40;
+    g.rect(-size / 2, -size / 2, size, size).stroke({
       width: Math.max(1, power * 3),
       color: 0x000000,
       alpha: 0.5,
     });
-    // Using a rectangle ring for compatibility
-    const size = power * 40;
-    g.rect(-size / 2, -size / 2, size, size);
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
     const targetContainer = this.container || this.app.stage;
     targetContainer.addChild(g);
-    // Draw stroke once per frame via stroke() call in tick
+    // Stroke is already applied above, no need for separate stroke() call in tick
     this.shockwaves.push({ g, life: 0, maxLife: 18 }); // ~0.3s at 60fps
   }
 
@@ -365,8 +362,7 @@ export class SoftBodyCharacter {
     if (this.blockTimer) window.clearTimeout(this.blockTimer);
     // Shield effect
     const g = new Graphics();
-    g.setStrokeStyle({ width: 4, color: 0xffffff, alpha: 0.6 });
-    g.rect(-50, -50, 100, 100);
+    g.rect(-50, -50, 100, 100).stroke({ width: 4, color: 0xffffff, alpha: 0.6 });
     g.x = this.getCenter().x;
     g.y = this.getCenter().y;
     const targetContainer = this.container || this.app.stage;
@@ -436,8 +432,7 @@ export class SoftBodyCharacter {
       const t = s.life / s.maxLife;
       s.g.alpha = 1 - t;
       s.g.scale.set(1 + t);
-      // Apply stroke so the rect is visible this frame
-      s.g.stroke();
+      // Stroke is already applied when graphics was created
       if (s.life >= s.maxLife) {
         s.g.destroy();
         this.shockwaves.splice(i, 1);

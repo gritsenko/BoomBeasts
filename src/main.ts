@@ -1,6 +1,9 @@
-import { Application, Assets, Graphics, Container } from 'pixi.js';
+import { Application, Assets, Graphics, Container, Sprite } from 'pixi.js';
 import Matter from 'matter-js';
 import { SoftBodyCharacter } from './SoftBodyCharacter';
+
+// Game version for cache busting verification
+const GAME_VERSION = '1.0.0';
 
 // Prevent right-click context menu
 document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -79,8 +82,22 @@ const blockButton = document.getElementById(
   'block-button'
 ) as HTMLButtonElement;
 const gameMessage = document.getElementById('game-message') as HTMLDivElement;
+const versionInfo = document.getElementById('version-info') as HTMLDivElement;
 const placeholderSlot = document.createElement('div');
 placeholderSlot.className = 'placeholder-slot';
+
+// Display game version
+if (versionInfo) {
+  versionInfo.textContent = `v${GAME_VERSION}`;
+}
+
+// Log version info for debugging cache issues
+console.log(
+  `BoomBeasts v${GAME_VERSION} loaded at ${new Date().toISOString()}`
+);
+console.log(
+  'If you experience issues, try hard refresh (Ctrl+F5) to clear cache'
+);
 
 // Game state
 type PlayerAction =
@@ -98,6 +115,9 @@ let enemyEnergy = MAX_ENERGY;
 let isRoundOver = false;
 let playerTimeline: PlayerAction[] = [];
 let enemyTimeline: EnemyAction[] = [];
+
+// Pause state
+let isPaused = false;
 let isActionTicking = false;
 let isEnemyActionTicking = false;
 let lastStompPressTime = 0;
@@ -109,6 +129,30 @@ let comboTimeout: number | null = null;
   const app = new Application();
   await app.init({ background: 'whitesmoke', resizeTo: window });
   document.getElementById('pixi-container')!.appendChild(app.canvas);
+
+  // Pause/Resume functions
+  function pauseGame() {
+    if (isPaused) return;
+    isPaused = true;
+    console.log('Game paused');
+  }
+
+  function resumeGame() {
+    if (!isPaused) return;
+    isPaused = false;
+    console.log('Game resumed');
+  }
+
+  // Add event listeners for pause/resume
+  window.addEventListener('blur', pauseGame);
+  window.addEventListener('focus', resumeGame);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      pauseGame();
+    } else {
+      resumeGame();
+    }
+  });
 
   // Add window resize listener
   window.addEventListener('resize', () => handleResize(app));
@@ -170,14 +214,17 @@ let comboTimeout: number | null = null;
   app.stage.addChild(gameContainer);
 
   // Visualize the floor/platform
-  const floorGraphics = gameContainer.addChild(new Graphics());
-  floorGraphics.rect(
-    platformX - platformWidth / 2,
-    platformY - platformHeight / 2,
-    platformWidth,
-    platformHeight
-  ).fill(0x8b4513, 0.8); // brown
-
+  if (debugMode) {
+    const floorGraphics = gameContainer.addChild(new Graphics());
+    floorGraphics
+      .rect(
+        platformX - platformWidth / 2,
+        platformY - platformHeight / 2,
+        platformWidth,
+        platformHeight
+      )
+      .fill(0x8b4513, 0.8); // brown
+  }
   // Debug overlay (wireframes)
   const debugContainer = new Container();
   debugContainer.visible = false; // Initially hidden
@@ -191,21 +238,31 @@ let comboTimeout: number | null = null;
   const safeFrameGraphics = new Graphics();
   // Draw safe frame centered around pivot (pivot is at SAFE_AREA center)
   safeFrameGraphics.position.set(0, 0);
-  safeFrameGraphics.rect(
-    -SAFE_AREA_SIZE / 2,
-    -SAFE_AREA_SIZE / 2,
-    SAFE_AREA_SIZE,
-    SAFE_AREA_SIZE
-  ).stroke({ width: 3, color: 0xff0000, alpha: 0.8 }); // Red border
+  safeFrameGraphics
+    .rect(
+      -SAFE_AREA_SIZE / 2,
+      -SAFE_AREA_SIZE / 2,
+      SAFE_AREA_SIZE,
+      SAFE_AREA_SIZE
+    )
+    .stroke({ width: 3, color: 0xff0000, alpha: 0.8 }); // Red border
   debugContainer.addChild(safeFrameGraphics);
 
   gameContainer.addChild(debugContainer);
 
   // Load textures
-  const [duckTexture, kapibaraTexture] = await Promise.all([
+  const [backTexture, duckTexture, kapibaraTexture] = await Promise.all([
+    Assets.load('./assets/back.png'),
     Assets.load('./assets/sprites/duck.png'),
     Assets.load('./assets/sprites/kapibara.png'),
   ]);
+
+  // Create background sprite
+  const backgroundSprite = new Sprite(backTexture);
+  backgroundSprite.anchor.set(0.5);
+  backgroundSprite.position.set(SAFE_AREA_SIZE / 2, SAFE_AREA_SIZE / 2 - 70);
+  backgroundSprite.scale.set(0.7);
+  gameContainer.addChildAt(backgroundSprite, 0); // Add as first child (background)
 
   // Create characters - positioned relative to new floor
   const player = new SoftBodyCharacter(
@@ -345,22 +402,27 @@ let comboTimeout: number | null = null;
 
   // Ticker
   app.ticker.add(() => {
+    // Always update physics engine for stability
     Engine.update(engine, 1000 / 60);
-    if (!isRoundOver) {
-      const dt = 1 / 60; // seconds
-      playerEnergy = Math.min(MAX_ENERGY, playerEnergy + ENERGY_REGEN * dt);
-      enemyEnergy = Math.min(MAX_ENERGY, enemyEnergy + ENERGY_REGEN * dt);
-      updateEnergyBar();
-      updateButtonStates();
-    }
-    player.update();
-    enemy.update();
-    if (!isRoundOver) {
-      checkBounds(player);
-      checkBounds(enemy);
+
+    // Only run game logic if not paused
+    if (!isPaused) {
+      if (!isRoundOver) {
+        const dt = 1 / 60; // seconds
+        playerEnergy = Math.min(MAX_ENERGY, playerEnergy + ENERGY_REGEN * dt);
+        enemyEnergy = Math.min(MAX_ENERGY, enemyEnergy + ENERGY_REGEN * dt);
+        updateEnergyBar();
+        updateButtonStates();
+      }
+      player.update();
+      enemy.update();
+      if (!isRoundOver) {
+        checkBounds(player);
+        checkBounds(enemy);
+      }
     }
 
-    // Draw debug wireframes
+    // Draw debug wireframes (always show when debug mode is on, regardless of pause)
     if (debugMode) {
       debugContainer.visible = true;
       debugBodies.clear();
@@ -413,9 +475,9 @@ let comboTimeout: number | null = null;
   });
 
   // AI timer
-  setInterval(
+  window.setInterval(
     () => {
-      if (isRoundOver) return;
+      if (isPaused || isRoundOver) return;
       const choice = Math.random();
       if (choice > 0.95 && enemyEnergy >= BLOCK_COST) {
         enemyEnergy -= BLOCK_COST;

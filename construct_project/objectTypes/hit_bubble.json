@@ -1,0 +1,63 @@
+{
+	"name": "hit_bubble",
+	"plugin-id": "Sprite",
+	"sid": 730831817571548,
+	"isGlobal": false,
+	"editorNewInstanceIsReplica": true,
+	"instanceVariables": [],
+	"behaviorTypes": [
+		{
+			"behaviorId": "Fade",
+			"name": "Fade",
+			"sid": 646509991275966
+		},
+		{
+			"behaviorId": "Sin",
+			"name": "Sine",
+			"sid": 619112922656187
+		}
+	],
+	"effectTypes": [],
+	"animations": {
+		"items": [
+			{
+				"frames": [
+					{
+						"width": 663,
+						"height": 479,
+						"originX": 0.4962292609351433,
+						"originY": 0.5156576200417536,
+						"originalSource": "",
+						"exportFormat": "lossless",
+						"exportQuality": 0.8,
+						"fileType": "image/png",
+						"imageSpriteId": 6115986,
+						"collisionPoly": {
+							"points": [
+								0,
+								0.0020876826722338203,
+								1,
+								0.0020876826722338203,
+								1,
+								0.9979123173277662,
+								0,
+								0.9979123173277662
+							]
+						},
+						"useCollisionPoly": true,
+						"duration": 1,
+						"tag": ""
+					}
+				],
+				"sid": 807820856438613,
+				"name": "Default",
+				"isLooping": false,
+				"isPingPong": false,
+				"repeatCount": 1,
+				"repeatTo": 0,
+				"speed": 5
+			}
+		],
+		"subfolders": []
+	}
+}

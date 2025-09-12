@@ -1,0 +1,17 @@
+{
+	"name": "Bodies",
+	"plugin-id": "Sprite",
+	"sid": 764299004184259,
+	"instanceVariables": [],
+	"behaviorTypes": [
+		{
+			"behaviorId": "Physics",
+			"name": "Physics",
+			"sid": 747221758899613
+		}
+	],
+	"effectTypes": [],
+	"members": [
+		"Warrior"
+	]
+}

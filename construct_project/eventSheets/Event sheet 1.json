@@ -5,13 +5,695 @@
 			"eventType": "block",
 			"conditions": [
 				{
-					"id": "every-tick",
+					"id": "on-start-of-layout",
 					"objectClass": "System",
-					"sid": 223818337220134
+					"sid": 547989004908640
+				}
+			],
+			"actions": [
+				{
+					"id": "destroy",
+					"objectClass": "Abilka",
+					"sid": 622021869402119
+				}
+			],
+			"sid": 837171547248104
+		},
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "on-any-touch-end",
+					"objectClass": "Touch",
+					"sid": 793784442217097
 				}
 			],
 			"actions": [],
-			"sid": 421641083589153
+			"sid": 609842685881230,
+			"children": [
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "pick-nth-instance",
+							"objectClass": "System",
+							"sid": 234962312038991,
+							"parameters": {
+								"object": "Warrior",
+								"instance": "0"
+							}
+						},
+						{
+							"id": "is-boolean-instance-variable-set",
+							"objectClass": "Warrior",
+							"sid": 979888120876311,
+							"parameters": {
+								"instance-variable": "IsPumping"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "set-boolean-instvar",
+							"objectClass": "Warrior",
+							"sid": 242709838065885,
+							"parameters": {
+								"instance-variable": "IsPumping",
+								"value": "false"
+							}
+						},
+						{
+							"callFunction": "PushAction",
+							"sid": 161438275210747,
+							"parameters": [
+								"1",
+								"Warrior.UID",
+								"Warrior.Streight"
+							]
+						}
+					],
+					"sid": 344335770202026
+				}
+			]
+		},
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "on-touched-object",
+					"objectClass": "Touch",
+					"sid": 210045344812052,
+					"parameters": {
+						"object": "Sprite",
+						"type": "start"
+					}
+				}
+			],
+			"actions": [],
+			"sid": 696922552682063,
+			"children": [
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "pick-nth-instance",
+							"objectClass": "System",
+							"sid": 127890450557881,
+							"parameters": {
+								"object": "Warrior",
+								"instance": "0"
+							}
+						},
+						{
+							"id": "compare-instance-variable",
+							"objectClass": "Warrior",
+							"sid": 322567309418548,
+							"parameters": {
+								"instance-variable": "CoolDown",
+								"comparison": 0,
+								"value": "0"
+							}
+						},
+						{
+							"id": "is-boolean-instance-variable-set",
+							"objectClass": "Warrior",
+							"sid": 327198530372012,
+							"parameters": {
+								"instance-variable": "IsPumping"
+							},
+							"isInverted": true
+						}
+					],
+					"actions": [
+						{
+							"id": "set-opacity",
+							"objectClass": "Sprite",
+							"sid": 222879015154120,
+							"parameters": {
+								"opacity": "50"
+							}
+						},
+						{
+							"id": "set-boolean-instvar",
+							"objectClass": "Warrior",
+							"sid": 267349648066297,
+							"parameters": {
+								"instance-variable": "IsPumping",
+								"value": "true"
+							}
+						}
+					],
+					"sid": 665064129100142,
+					"children": [
+						{
+							"eventType": "block",
+							"conditions": [
+								{
+									"id": "pick-by-unique-id",
+									"objectClass": "Skin",
+									"sid": 726898888133068,
+									"parameters": {
+										"unique-id": "Warrior.SkinUID"
+									}
+								}
+							],
+							"actions": [
+								{
+									"id": "set-animation",
+									"objectClass": "Skin",
+									"sid": 343285747564245,
+									"parameters": {
+										"animation": "\"Pumping\"",
+										"from": "beginning"
+									}
+								},
+								{
+									"id": "set-active",
+									"objectClass": "Skin",
+									"sid": 542349489499245,
+									"behaviorType": "Sine",
+									"parameters": {
+										"state": "active"
+									}
+								}
+							],
+							"sid": 951051316806482
+						}
+					]
+				}
+			]
+		},
+		{
+			"functionName": "PushAction",
+			"functionDescription": "",
+			"functionCategory": "",
+			"functionReturnType": "none",
+			"functionCopyPicked": false,
+			"functionIsAsync": false,
+			"functionParameters": [
+				{
+					"name": "AttackType",
+					"type": "number",
+					"initialValue": "0",
+					"comment": "",
+					"sid": 678383828865878
+				},
+				{
+					"name": "UID",
+					"type": "number",
+					"initialValue": "0",
+					"comment": "",
+					"sid": 808780591324301
+				},
+				{
+					"name": "Power",
+					"type": "number",
+					"initialValue": "0",
+					"comment": "",
+					"sid": 719084234143178
+				}
+			],
+			"eventType": "function-block",
+			"conditions": [],
+			"actions": [],
+			"sid": 957950836847243,
+			"children": [
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "pick-by-unique-id",
+							"objectClass": "Warrior",
+							"sid": 597730302250715,
+							"parameters": {
+								"unique-id": "UID"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "set-instvar-value",
+							"objectClass": "Warrior",
+							"sid": 535889585492056,
+							"parameters": {
+								"instance-variable": "CoolDown",
+								"value": "1"
+							}
+						},
+						{
+							"id": "apply-impulse-at-angle",
+							"objectClass": "Warrior",
+							"sid": 452383189966007,
+							"behaviorType": "Physics",
+							"parameters": {
+								"impulse": "ceil(Power) * 30",
+								"angle": "angle(Self.X,Self.Y, kapibara.X, kapibara.Y) - 30",
+								"image-point": "0"
+							}
+						},
+						{
+							"id": "set-instvar-value",
+							"objectClass": "Warrior",
+							"sid": 225858896854066,
+							"parameters": {
+								"instance-variable": "Streight",
+								"value": "0"
+							}
+						}
+					],
+					"sid": 770407711996714,
+					"children": [
+						{
+							"eventType": "block",
+							"conditions": [
+								{
+									"id": "pick-by-unique-id",
+									"objectClass": "Skin",
+									"sid": 905637793597054,
+									"parameters": {
+										"unique-id": "Warrior.SkinUID"
+									}
+								}
+							],
+							"actions": [
+								{
+									"id": "set-animation",
+									"objectClass": "Skin",
+									"sid": 452521508076868,
+									"parameters": {
+										"animation": "\"Default\"",
+										"from": "beginning"
+									}
+								},
+								{
+									"id": "set-active",
+									"objectClass": "Skin",
+									"sid": 234871277013510,
+									"behaviorType": "Sine",
+									"parameters": {
+										"state": "inactive"
+									}
+								}
+							],
+							"sid": 717476865168889
+						}
+					]
+				},
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "compare-two-values",
+							"objectClass": "System",
+							"sid": 682990349893033,
+							"parameters": {
+								"first-value": "Power",
+								"comparison": 4,
+								"second-value": "1"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "play",
+							"objectClass": "Audio",
+							"sid": 367659538908591,
+							"parameters": {
+								"audio-file": "jump1",
+								"loop": "not-looping",
+								"volume": "0",
+								"stereo-pan": "0",
+								"tag-optional": "\"\""
+							}
+						}
+					],
+					"sid": 827358893853915
+				}
+			]
+		},
+		{
+			"eventType": "comment",
+			"text": "UPDATE"
+		},
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "every-tick",
+					"objectClass": "System",
+					"sid": 442928497574928
+				}
+			],
+			"actions": [
+				{
+					"id": "set-height",
+					"objectClass": "Streight1",
+					"sid": 120586460739132,
+					"parameters": {
+						"height": "Warrior.Streight*20"
+					}
+				},
+				{
+					"id": "set-text",
+					"objectClass": "Text",
+					"sid": 819275089946037,
+					"parameters": {
+						"text": "ceil(Warrior.Streight) & \"x\""
+					}
+				}
+			],
+			"sid": 508396017749769,
+			"children": [
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "for-each",
+							"objectClass": "System",
+							"sid": 639663024796638,
+							"parameters": {
+								"object": "Warrior"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "set-instvar-value",
+							"objectClass": "Warrior",
+							"sid": 327475751153672,
+							"parameters": {
+								"instance-variable": "CoolDown",
+								"value": "max(0, Self.CoolDown - dt)"
+							}
+						}
+					],
+					"sid": 203735068108692,
+					"children": [
+						{
+							"eventType": "block",
+							"conditions": [
+								{
+									"id": "is-boolean-instance-variable-set",
+									"objectClass": "Warrior",
+									"sid": 855959877570781,
+									"parameters": {
+										"instance-variable": "IsPumping"
+									}
+								}
+							],
+							"actions": [
+								{
+									"id": "set-instvar-value",
+									"objectClass": "Warrior",
+									"sid": 246470398599466,
+									"parameters": {
+										"instance-variable": "Streight",
+										"value": "min(Self.MaxStreight, Self.Streight +  0.1)"
+									}
+								}
+							],
+							"sid": 772139340909076
+						}
+					]
+				},
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "pick-nth-instance",
+							"objectClass": "System",
+							"sid": 933074341517610,
+							"parameters": {
+								"object": "Warrior",
+								"instance": "0"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "set-instvar-value",
+							"objectClass": "duck",
+							"sid": 681916562880064,
+							"parameters": {
+								"instance-variable": "tx",
+								"value": "Warrior.X"
+							}
+						},
+						{
+							"id": "set-instvar-value",
+							"objectClass": "duck",
+							"sid": 915184853481299,
+							"parameters": {
+								"instance-variable": "ty",
+								"value": "Warrior.ImagePointY(1)"
+							}
+						},
+						{
+							"id": "set-angle",
+							"objectClass": "duck",
+							"sid": 507576709988829,
+							"parameters": {
+								"angle": "Warrior.Angle"
+							}
+						}
+					],
+					"sid": 357114920007415,
+					"children": [
+						{
+							"eventType": "block",
+							"conditions": [
+								{
+									"id": "compare-instance-variable",
+									"objectClass": "Warrior",
+									"sid": 887463755530453,
+									"parameters": {
+										"instance-variable": "CoolDown",
+										"comparison": 3,
+										"value": "0"
+									}
+								},
+								{
+									"id": "is-boolean-instance-variable-set",
+									"objectClass": "Warrior",
+									"sid": 615849767481975,
+									"parameters": {
+										"instance-variable": "IsPumping"
+									},
+									"isInverted": true
+								}
+							],
+							"actions": [
+								{
+									"id": "set-opacity",
+									"objectClass": "Sprite",
+									"sid": 557692377485705,
+									"parameters": {
+										"opacity": "100"
+									}
+								}
+							],
+							"sid": 381818449450230
+						}
+					]
+				},
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "pick-nth-instance",
+							"objectClass": "System",
+							"sid": 279261414457070,
+							"parameters": {
+								"object": "Warrior",
+								"instance": "1"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "set-instvar-value",
+							"objectClass": "kapibara",
+							"sid": 847674848869139,
+							"parameters": {
+								"instance-variable": "tx",
+								"value": "Warrior.X"
+							}
+						},
+						{
+							"id": "set-instvar-value",
+							"objectClass": "kapibara",
+							"sid": 530756958941620,
+							"parameters": {
+								"instance-variable": "ty",
+								"value": "Warrior.ImagePointY(1)"
+							}
+						},
+						{
+							"id": "set-angle",
+							"objectClass": "kapibara",
+							"sid": 598255080020810,
+							"parameters": {
+								"angle": "Warrior.Angle"
+							}
+						}
+					],
+					"sid": 321399060312939
+				}
+			]
+		},
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "on-collision-with-another-object",
+					"objectClass": "duck",
+					"sid": 967705033711412,
+					"parameters": {
+						"object": "kapibara"
+					}
+				}
+			],
+			"actions": [
+				{
+					"id": "play",
+					"objectClass": "Audio",
+					"sid": 619514314089901,
+					"parameters": {
+						"audio-file": "hit",
+						"loop": "not-looping",
+						"volume": "-10",
+						"stereo-pan": "0",
+						"tag-optional": "\"\""
+					}
+				}
+			],
+			"sid": 703463453809722,
+			"children": [
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "compare-two-values",
+							"objectClass": "System",
+							"sid": 175946734464826,
+							"parameters": {
+								"first-value": "hit_bubble.Count",
+								"comparison": 0,
+								"second-value": "0"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "create-object",
+							"objectClass": "System",
+							"sid": 797490176355855,
+							"parameters": {
+								"object-to-create": "hit_bubble",
+								"layer": "\"Overlay\"",
+								"x": "(kapibara.X + duck.X)/2",
+								"y": "(kapibara.Y + duck.Y)/2",
+								"create-hierarchy": false,
+								"template-name": "\"\""
+							}
+						}
+					],
+					"sid": 219243265382545
+				},
+				{
+					"eventType": "block",
+					"conditions": [
+						{
+							"id": "compare-two-values",
+							"objectClass": "System",
+							"sid": 549089266442990,
+							"parameters": {
+								"first-value": "Abilka.Count",
+								"comparison": 0,
+								"second-value": "0"
+							}
+						}
+					],
+					"actions": [
+						{
+							"id": "create-object",
+							"objectClass": "System",
+							"sid": 879838605904300,
+							"parameters": {
+								"object-to-create": "Abilka",
+								"layer": "\"Overlay\"",
+								"x": "kapibara.X",
+								"y": "kapibara.Y",
+								"create-hierarchy": false,
+								"template-name": "\"\""
+							}
+						},
+						{
+							"id": "set-animation-frame",
+							"objectClass": "Abilka",
+							"sid": 325957252126058,
+							"parameters": {
+								"frame-number": "random(0, Self.AnimationFrameCount - 1)"
+							}
+						},
+						{
+							"id": "apply-impulse-at-angle",
+							"objectClass": "Abilka",
+							"sid": 333605098165307,
+							"behaviorType": "Physics",
+							"parameters": {
+								"impulse": "10",
+								"angle": "-90",
+								"image-point": "0"
+							}
+						},
+						{
+							"id": "set-angle-of-motion",
+							"objectClass": "Abilka",
+							"sid": 169184618063198,
+							"behaviorType": "Bullet",
+							"parameters": {
+								"angle": "random(-115, -45)"
+							}
+						}
+					],
+					"sid": 487522130273316
+				}
+			]
+		},
+		{
+			"eventType": "block",
+			"conditions": [
+				{
+					"id": "on-touched-object",
+					"objectClass": "Touch",
+					"sid": 486044705398999,
+					"parameters": {
+						"object": "Abilka",
+						"type": "start"
+					}
+				}
+			],
+			"actions": [
+				{
+					"id": "play",
+					"objectClass": "Audio",
+					"sid": 356620538284928,
+					"parameters": {
+						"audio-file": "Move",
+						"loop": "not-looping",
+						"volume": "0",
+						"stereo-pan": "0",
+						"tag-optional": "\"\""
+					}
+				},
+				{
+					"id": "destroy",
+					"objectClass": "Abilka",
+					"sid": 588168681362031
+				}
+			],
+			"sid": 599729692112135
 		}
 	],
 	"sid": 234353029108781

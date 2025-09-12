@@ -8,8 +8,85 @@
 	"usedAddons": [
 		{
 			"type": "plugin",
+			"id": "Audio",
+			"name": "Audio",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "Browser",
+			"name": "Browser",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
 			"id": "Sprite",
 			"name": "Sprite",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "Text",
+			"name": "Text",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "TiledBg",
+			"name": "Tiled Background",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "plugin",
+			"id": "Touch",
+			"name": "Touch",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "behavior",
+			"id": "Bullet",
+			"name": "Bullet",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "behavior",
+			"id": "Fade",
+			"name": "Fade",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "behavior",
+			"id": "Physics",
+			"name": "Physics",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "behavior",
+			"id": "Sin",
+			"name": "Sine",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "behavior",
+			"id": "Timer",
+			"name": "Timer",
+			"author": "Scirra",
+			"bundled": false
+		},
+		{
+			"type": "behavior",
+			"id": "destroy",
+			"name": "Destroy outside layout",
 			"author": "Scirra",
 			"bundled": false
 		}
@@ -19,7 +96,20 @@
 		"items": [
 			"duck",
 			"back",
-			"kapibara"
+			"kapibara",
+			"Warrior",
+			"Sprite2",
+			"Sprite",
+			"Touch",
+			"Streight1",
+			"Sprite3",
+			"Sprite4",
+			"Audio",
+			"Browser",
+			"Text",
+			"hit_bubble",
+			"Abilka",
+			"Sprite5"
 		],
 		"subfolders": []
 	},
@@ -28,7 +118,10 @@
 	"containers": [],
 	"families": {
 		"items": [
-			"SoftBodies"
+			"SoftBodies",
+			"Solids",
+			"Bodies",
+			"Skin"
 		],
 		"subfolders": []
 	},
@@ -62,13 +155,78 @@
 					"script-info": {
 						"purpose": "none"
 					}
+				},
+				{
+					"name": "SoftBody.ts",
+					"type": "application/typescript",
+					"sid": 776087183634725,
+					"script-info": {
+						"purpose": "none"
+					}
+				},
+				{
+					"name": "warrior.ts",
+					"type": "application/typescript",
+					"sid": 156508245753231,
+					"script-info": {
+						"purpose": "none"
+					}
 				}
 			],
 			"subfolders": [],
 			"autoReloadOnPreview": true
 		},
 		"sound": {
-			"items": [],
+			"items": [
+				{
+					"name": "hit.webm",
+					"type": "audio/webm; codecs=opus",
+					"sid": 407920351590662,
+					"file-info": {
+						"purpose": "none"
+					}
+				},
+				{
+					"name": "jump_landing.webm",
+					"type": "audio/webm; codecs=opus",
+					"sid": 231899393417454,
+					"file-info": {
+						"purpose": "none"
+					}
+				},
+				{
+					"name": "jump1.webm",
+					"type": "audio/webm; codecs=opus",
+					"sid": 626500422026279,
+					"file-info": {
+						"purpose": "none"
+					}
+				},
+				{
+					"name": "man_dying.webm",
+					"type": "audio/webm; codecs=opus",
+					"sid": 516947611539471,
+					"file-info": {
+						"purpose": "none"
+					}
+				},
+				{
+					"name": "Move.webm",
+					"type": "audio/webm; codecs=opus",
+					"sid": 673133476325295,
+					"file-info": {
+						"purpose": "none"
+					}
+				},
+				{
+					"name": "puff.webm",
+					"type": "audio/webm; codecs=opus",
+					"sid": 889497718699303,
+					"file-info": {
+						"purpose": "none"
+					}
+				}
+			],
 			"subfolders": []
 		},
 		"music": {
@@ -80,7 +238,16 @@
 			"subfolders": []
 		},
 		"font": {
-			"items": [],
+			"items": [
+				{
+					"name": "LilitaOne-Regular.ttf",
+					"type": "application/font-sfnt",
+					"sid": 293129725064078,
+					"file-info": {
+						"purpose": "none"
+					}
+				}
+			],
 			"subfolders": []
 		},
 		"icon": {
@@ -212,14 +379,14 @@
 		"zNear": 1,
 		"zFar": 10000,
 		"maxSpriteSheetSize": 2048,
-		"loaderStyle": "splash",
+		"loaderStyle": "progress",
 		"preloadSounds": true,
 		"cordovaiOSScheme": "app",
 		"cordovaAndroidScheme": "https",
 		"exportFileStructure": "folders",
 		"uidAllocationMode": "increment"
 	},
-	"viewportWidth": 720,
-	"viewportHeight": 1280,
+	"viewportWidth": 800,
+	"viewportHeight": 1200,
 	"firstLayout": null
 }

@@ -1,12 +1,10 @@
-// Import any other script files here, e.g.:
-// import * as myModule from "./mymodule.js";
+// Import mesh utilities
+import { captureInitialMesh, updateMeshPoints } from './SoftBody.js';
+import { WarriorController } from './warrior.js';
 
-// Store initial mesh data per instance so we can apply deformations relative to baseline
-const initialMeshPoints = new WeakMap<IWorldInstance, {
-  cols: number;
-  rows: number;
-  points: GetMeshPointOpts[][]; // [col][row]
-}>();
+const warriors: WarriorController[] = [];
+
+let timer = 0;
 
 runOnStartup(async (runtime) => {
   // Code to run on the loading screen.
@@ -22,65 +20,54 @@ async function OnBeforeProjectStart(runtime: IRuntime) {
   // the first layout. Loading has finished and initial
   // instances are created and available to use here.
 
+  for (const instance of runtime.objects.Warrior.instances()) {
+    const controller = new WarriorController(instance);
+    warriors.push(controller);
+  }
+
   // Capture baseline mesh points for all existing SoftBodies instances
   for (const instance of runtime.objects.SoftBodies.instances()) {
     captureInitialMesh(instance);
   }
-  
+
   runtime.addEventListener('tick', () => Tick(runtime));
 }
 
 function Tick(runtime: IRuntime) {
-  // Animation parameters
-  const amplitude = 8; // pixels
-  const frequency = 10; // oscillations per second
+  const dt = runtime.dt; // Time step
 
-  // Simple time-based oscillation that guarantees zero average
-  const timePhase = (runtime.gameTime * 0.001) * frequency * Math.PI * 2;
-  const globalWave = Math.sin(timePhase);
+  timer += dt;
+  if (timer >= 2) {
+    enemyAction(runtime);
+    timer = 0;
+  }
 
   for (const instance of runtime.objects.SoftBodies.instances()) {
-    // Lazily capture baseline for instances created after startup
-    if (!initialMeshPoints.has(instance)) {
-      captureInitialMesh(instance);
-    }
+    const tpos = { x: instance.instVars.tx, y: instance.instVars.ty };
 
-    const data = initialMeshPoints.get(instance);
-    if (!data) continue; // no mesh present
+    // Debug: log tpos and instance position
+    // console.log(
+    //   `Instance pos: ${instance.x}, ${instance.y}, tpos: ${tpos.x}, ${tpos.y}, targetLocal: ${tpos.x}, ${tpos.y}`
+    // );
 
-    const { cols, rows, points } = data;
+    instance.x = lerp(instance.x, tpos.x, 0.3);
+    instance.y = lerp(instance.y, tpos.y, 0.3);
 
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        const base = points[i][j];
-
-        // Vertical factor: stronger wave effect in the middle of the character
-        const verticalFactor = Math.sin((j / Math.max(1, rows - 1)) * Math.PI);
-        
-        // Simple oscillation with no spatial component to prevent drift
-        const waveOffset = globalWave * amplitude ;
-
-        // Apply horizontal displacement
-        const newX = base.x + waveOffset;
-
-		console.log(waveOffset);
-        instance.setMeshPoint(i, j, { mode: "absolute", x: newX, y: base.y });
-      }
-    }
+    updateMeshPoints(tpos, instance, dt);
   }
 }
+function lerp(x: number, x1: number, t: number): number {
+  return x + (x1 - x) * t;
+}
 
-function captureInitialMesh(instance: IWorldInstance) {
-  const [cols, rows] = instance.getMeshSize();
-  if (!cols || !rows) return; // no mesh to capture
+function enemyAction(runtime: IRuntime) {
+  runtime.callFunction('PushAction', 1, 7, Math.random()*2);
 
-  const points: GetMeshPointOpts[][] = new Array(cols);
-  for (let i = 0; i < cols; i++) {
-    points[i] = new Array(rows);
-    for (let j = 0; j < rows; j++) {
-      points[i][j] = instance.getMeshPoint(i, j);
-    }
-  }
+  const lastInstance = (() => {
+    const arr = Array.from(runtime.objects.SoftBodies.instances());
+    return arr.length ? arr[arr.length - 1] : null;
+  })();
 
-  initialMeshPoints.set(instance, { cols, rows, points });
+  lastInstance?.setAnimation("Pumping");
+  setTimeout(()=> lastInstance?.setAnimation("Default"), 500);
 }

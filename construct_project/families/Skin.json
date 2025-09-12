@@ -1,0 +1,26 @@
+{
+	"name": "Skin",
+	"plugin-id": "Sprite",
+	"sid": 130523244989773,
+	"instanceVariables": [
+		{
+			"name": "TargetUid",
+			"type": "number",
+			"desc": "",
+			"show": true,
+			"sid": 957099076131649
+		}
+	],
+	"behaviorTypes": [
+		{
+			"behaviorId": "Sin",
+			"name": "Sine",
+			"sid": 170443623575898
+		}
+	],
+	"effectTypes": [],
+	"members": [
+		"kapibara",
+		"duck"
+	]
+}

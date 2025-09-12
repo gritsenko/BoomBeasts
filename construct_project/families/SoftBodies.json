@@ -2,7 +2,22 @@
 	"name": "SoftBodies",
 	"plugin-id": "Sprite",
 	"sid": 136305169746202,
-	"instanceVariables": [],
+	"instanceVariables": [
+		{
+			"name": "tx",
+			"type": "number",
+			"desc": "",
+			"show": true,
+			"sid": 279604873018274
+		},
+		{
+			"name": "ty",
+			"type": "number",
+			"desc": "",
+			"show": true,
+			"sid": 998759820979556
+		}
+	],
 	"behaviorTypes": [],
 	"effectTypes": [],
 	"members": [

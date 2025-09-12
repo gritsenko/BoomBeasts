@@ -1,0 +1,17 @@
+{
+	"name": "Solids",
+	"plugin-id": "Sprite",
+	"sid": 504288943430931,
+	"instanceVariables": [],
+	"behaviorTypes": [
+		{
+			"behaviorId": "Physics",
+			"name": "Physics",
+			"sid": 140191418226329
+		}
+	],
+	"effectTypes": [],
+	"members": [
+		"Sprite2"
+	]
+}
